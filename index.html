@@ -607,8 +607,14 @@ function renderProps(){
   const letterSpacing = (letterSpacingRaw==='normal') ? 0 : (parseFloat(letterSpacingRaw)||0);
   const isCodeLike = (tag==='code' || tag==='pre' || el.querySelector('code,pre'));
 
-  const isLeaf = el.children.length === 0;
-  const text = isLeaf ? el.textContent : '';
+  // 텍스트 편집 가능 여부: 자식이 없거나, <br>만 자식으로 가진 경우(줄바꿈 텍스트)
+  const isTextLeaf = (el.children.length === 0) ||
+    Array.from(el.children).every(c => c.tagName === 'BR');
+  const isLeaf = isTextLeaf;
+  // innerHTML의 <br>을 \n으로 변환해 textarea에 표시 (다른 태그는 textContent로)
+  const text = isTextLeaf
+    ? el.innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
+    : '';
 
   p.innerHTML = `
     <div id="crumbs">${buildCrumbs(el)}</div>
@@ -693,7 +699,11 @@ function renderProps(){
   };
   bind('f-lh', e => { applyToScope('lineHeight', e.target.value); renderHandles(); });
   bind('f-ls', e => { applyToScope('letterSpacing', e.target.value+'px'); renderHandles(); });
-  if(isLeaf) bind('f-text', e => { el.textContent = e.target.value; renderHandles(); });
+  if(isLeaf) bind('f-text', e => {
+    // textarea의 \n을 <br>로, HTML 특수문자는 escape
+    el.innerHTML = escapeHTML(e.target.value).replace(/\n/g, '<br>');
+    renderHandles();
+  });
   bind('f-style', e => { el.setAttribute('style', e.target.value); renderHandles(); });
 
   // commit snapshot on blur for inputs
@@ -757,15 +767,27 @@ function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;
 
 // ============ Inline text edit ============
 function startInlineEdit(el){
-  if(!el || el.children.length>0) return;
+  if(!el) return;
+  // <br>만 자식인 텍스트 노드도 편집 허용
+  const onlyBR = Array.from(el.children).every(c => c.tagName === 'BR');
+  if(el.children.length > 0 && !onlyBR) return;
   selectElement(el);
   el.contentEditable = 'true';
   el.focus();
   const range = el.ownerDocument.createRange(); range.selectNodeContents(el);
   const sel = el.ownerDocument.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+  // Enter는 <br> 삽입(브라우저 기본 <div>/<p> 삽입 방지)
+  const onKey = (ev) => {
+    if(ev.key === 'Enter' && !ev.shiftKey) {
+      ev.preventDefault();
+      el.ownerDocument.execCommand('insertLineBreak');
+    }
+  };
+  el.addEventListener('keydown', onKey);
   const stop = () => {
     el.contentEditable = 'false';
     el.removeEventListener('blur', stop);
+    el.removeEventListener('keydown', onKey);
     snapshot();
     renderProps();
   };
