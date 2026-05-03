@@ -4,7 +4,7 @@
 
 ## 사용
 
-- 라이브: https://muttul58-coder.github.io/HTML_PTT_EDIT/
+- 라이브: https://muttul58-coder.github.io/HTML_PPT_EDIT/
 - 로컬: `index.html`을 브라우저로 열기
 
 ## 구조
