@@ -607,14 +607,20 @@ function renderProps(){
   const letterSpacing = (letterSpacingRaw==='normal') ? 0 : (parseFloat(letterSpacingRaw)||0);
   const isCodeLike = (tag==='code' || tag==='pre' || el.querySelector('code,pre'));
 
-  // 텍스트 편집 가능 여부: 자식이 없거나, <br>만 자식으로 가진 경우(줄바꿈 텍스트)
-  const isTextLeaf = (el.children.length === 0) ||
+  // 텍스트 편집: 자식이 없거나 <br>만 있으면 plain 모드, 그 외에는 HTML(태그 포함) 모드
+  const isPlainText = (el.children.length === 0) ||
     Array.from(el.children).every(c => c.tagName === 'BR');
-  const isLeaf = isTextLeaf;
-  // innerHTML의 <br>을 \n으로 변환해 textarea에 표시 (다른 태그는 textContent로)
-  const text = isTextLeaf
-    ? el.innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
+  const hasContent = el.innerHTML.trim().length > 0 || el.textContent.trim().length > 0;
+  // 슬라이드 자체는 편집 패널 안 보임. 내용 있으면 항상 편집 가능
+  const isLeaf = !el.classList.contains('slide') && hasContent;
+  // textarea 표시: <br>만 \n으로 보여주고, 소스 들여쓰기 공백/개행은 단일 공백으로 축약
+  // (브라우저가 시각적으로 축약하는 것과 동일하게 만들어 round-trip 시 들여쓰기가 <br>로 변하는 것 방지)
+  const text = isLeaf
+    ? el.innerHTML.replace(/<br\s*\/?>/gi, '').replace(/\s+/g, ' ').replace(//g, '\n').trim()
     : '';
+  const textHint = isPlainText
+    ? '줄바꿈은 Enter로 입력'
+    : '<span style="color:#f5a623">태그 포함 — Enter는 줄바꿈(&lt;br&gt;), 태그는 그대로 입력하세요</span>';
 
   p.innerHTML = `
     <div id="crumbs">${buildCrumbs(el)}</div>
@@ -662,7 +668,7 @@ function renderProps(){
         </select>
       </div>
     </div>
-    ${isLeaf?`<div class="ph">텍스트</div><div class="field"><textarea id="f-text" rows="3">${escapeHTML(text)}</textarea></div>`:''}
+    ${isLeaf?`<div class="ph">텍스트 <span style="color:#888;font-weight:400">${textHint}</span></div><div class="field"><textarea id="f-text" rows="4">${escapeHTML(text)}</textarea></div>`:''}
     <div class="ph">고급</div>
     <div class="field"><label>style 직접 편집</label><textarea id="f-style" rows="3">${escapeHTML(el.getAttribute('style')||'')}</textarea></div>
     <div class="row-btns">
@@ -700,8 +706,13 @@ function renderProps(){
   bind('f-lh', e => { applyToScope('lineHeight', e.target.value); renderHandles(); });
   bind('f-ls', e => { applyToScope('letterSpacing', e.target.value+'px'); renderHandles(); });
   if(isLeaf) bind('f-text', e => {
-    // textarea의 \n을 <br>로, HTML 특수문자는 escape
-    el.innerHTML = escapeHTML(e.target.value).replace(/\n/g, '<br>');
+    if(isPlainText){
+      // plain 모드: <, >, & escape + \n → <br>
+      el.innerHTML = escapeHTML(e.target.value).replace(/\n/g, '<br>');
+    } else {
+      // HTML 모드: 태그는 그대로, \n만 <br>로 변환 (사용자가 <code> 등을 직접 입력)
+      el.innerHTML = e.target.value.replace(/\n/g, '<br>');
+    }
     renderHandles();
   });
   bind('f-style', e => { el.setAttribute('style', e.target.value); renderHandles(); });
