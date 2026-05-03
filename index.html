@@ -456,13 +456,10 @@ function makeAbsolute(el){
   el.style.position = 'absolute';
   el.style.margin = '0';
 
-  // 자식이 있는 컨테이너는 슬라이드 루트로 옮기지 않음
-  // (옮기면 자식의 positioning context가 깨지고, 부모 flex/grid가 재배치되어 코드/내용이 사라지는 것처럼 보임)
-  const isContainer = el.children.length > 0;
-  const target = isContainer ? (el.offsetParent || slide) : slide;
-  if(!isContainer && el.parentElement !== slide){
-    slide.appendChild(el);
-  }
+  // reparenting은 하지 않음 — 부모 flex/grid 레이아웃이 재배치되며
+  // 형제 요소가 빈 공간을 채워 시각적으로 깨지는 것을 방지.
+  // 좌표는 offsetParent(가장 가까운 positioned 조상) 기준.
+  const target = el.offsetParent || slide;
   const targetRect = target.getBoundingClientRect();
   el.style.left = (elRect.left - targetRect.left) + 'px';
   el.style.top  = (elRect.top  - targetRect.top)  + 'px';
