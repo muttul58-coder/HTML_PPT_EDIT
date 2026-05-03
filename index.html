@@ -64,6 +64,10 @@ button{font-family:inherit;font-size:12px;}
 .field input:focus,.field textarea:focus{outline:none;border-color:#00d4a0;}
 .field textarea{resize:vertical;min-height:60px;font-family:'Consolas',monospace;font-size:11px;}
 .row-btns{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;}
+.row-nudge{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:-2px 0 6px;}
+.nudge{background:#1f232c;color:#e8eaf2;border:1px solid #353945;border-radius:4px;padding:4px 0;cursor:pointer;font-size:13px;line-height:1;}
+.nudge:hover{background:#2a2f39;border-color:#00d4a0;}
+.nudge:active{background:#00d4a0;color:#0d1018;}
 .mini-btn{background:#262932;color:#e8eaf2;border:1px solid #353945;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px;}
 .mini-btn:hover{background:#353945;}
 .mini-btn.danger{border-color:#a13030;}
@@ -629,10 +633,16 @@ function renderProps(){
       <div class="field"><label>tag</label><input value="${escapeHTML(tag)}" disabled></div>
       <div class="field"><label>class</label><input id="f-class" value="${escapeHTML(cls)}"></div>
     </div>
-    <div class="ph">위치 & 크기 ${isAbs?'':'<span style="color:#f5a623">(클릭/드래그시 절대위치 전환)</span>'}</div>
+    <div class="ph">위치 & 크기 ${isAbs?'':'<span style="color:#f5a623">(클릭/드래그시 절대위치 전환)</span>'} <span style="color:#888;font-weight:400">· 방향 버튼: 1px (Shift +10)</span></div>
     <div class="row">
       <div class="field"><label>X</label><input id="f-x" type="number" value="${left.toFixed(0)}"></div>
       <div class="field"><label>Y</label><input id="f-y" type="number" value="${top.toFixed(0)}"></div>
+    </div>
+    <div class="row-nudge">
+      <button class="nudge" data-axis="x" data-dir="-1" title="왼쪽 1px (Shift: 10)">◀</button>
+      <button class="nudge" data-axis="x" data-dir="1"  title="오른쪽 1px (Shift: 10)">▶</button>
+      <button class="nudge" data-axis="y" data-dir="-1" title="위 1px (Shift: 10)">▲</button>
+      <button class="nudge" data-axis="y" data-dir="1"  title="아래 1px (Shift: 10)">▼</button>
     </div>
     <div class="row">
       <div class="field"><label>W</label><input id="f-w" type="number" value="${w.toFixed(0)}"></div>
@@ -685,6 +695,21 @@ function renderProps(){
   bind('f-class', e => { el.className = e.target.value; renderHandles(); });
   bind('f-x', e => { ensureAbs(el); el.style.left = e.target.value+'px'; renderHandles(); });
   bind('f-y', e => { ensureAbs(el); el.style.top  = e.target.value+'px'; renderHandles(); });
+  // 방향 버튼: 현재 위치 기준 nudge (Shift = 10px)
+  p.querySelectorAll('.nudge').forEach(btn => {
+    btn.addEventListener('click', ev => {
+      ensureAbs(el);
+      const step = ev.shiftKey ? 10 : 1;
+      const dir = parseInt(btn.dataset.dir);
+      const axis = btn.dataset.axis;
+      if(axis === 'x'){
+        el.style.left = ((parseFloat(el.style.left)||0) + dir*step) + 'px';
+      } else {
+        el.style.top  = ((parseFloat(el.style.top) ||0) + dir*step) + 'px';
+      }
+      renderHandles(); syncPropFields(); snapshot();
+    });
+  });
   bind('f-w', e => { ensureAbs(el); el.style.width = e.target.value+'px'; renderHandles(); });
   bind('f-h', e => { ensureAbs(el); el.style.height = e.target.value+'px'; renderHandles(); });
   bind('f-color', e => { el.style.color = e.target.value; });
