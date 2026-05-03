@@ -444,22 +444,26 @@ function makeAbsolute(el){
   const slide = getSlideRoot(el);
   if(!slide) return;
   const elRect = el.getBoundingClientRect();
-  const slideRect = slide.getBoundingClientRect();
-  const left = elRect.left - slideRect.left;
-  const top  = elRect.top  - slideRect.top;
   const w = elRect.width;
   const h = elRect.height;
-  // ensure slide is positioned (it is, position:absolute by stylesheet)
+
+  // box-sizing: border-box로 통일 → W/H 값이 실제 박스 크기와 일치
+  el.style.boxSizing = 'border-box';
   el.style.position = 'absolute';
-  el.style.left = left + 'px';
-  el.style.top  = top  + 'px';
-  el.style.width = w + 'px';
-  el.style.height = h + 'px';
   el.style.margin = '0';
-  // append to slide so coordinates are relative to it (avoids parent flex/grid affecting layout)
-  if(el.parentElement !== slide){
+
+  // 자식이 있는 컨테이너는 슬라이드 루트로 옮기지 않음
+  // (옮기면 자식의 positioning context가 깨지고, 부모 flex/grid가 재배치되어 코드/내용이 사라지는 것처럼 보임)
+  const isContainer = el.children.length > 0;
+  const target = isContainer ? (el.offsetParent || slide) : slide;
+  if(!isContainer && el.parentElement !== slide){
     slide.appendChild(el);
   }
+  const targetRect = target.getBoundingClientRect();
+  el.style.left = (elRect.left - targetRect.left) + 'px';
+  el.style.top  = (elRect.top  - targetRect.top)  + 'px';
+  el.style.width = w + 'px';
+  el.style.height = h + 'px';
 }
 
 function startDragMove(e){

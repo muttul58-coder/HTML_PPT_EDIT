@@ -10,7 +10,6 @@
 ## 구조
 
 - `index.html` — 편집기 본체 (GitHub Pages 진입점)
-- `editor.html` — 동일 파일 (호환용)
 - `data/` — 샘플 슬라이드
 
 ## 배포

@@ -12,3 +12,6 @@ desktop.ini
 *.bak
 *~
 *- 복사본*
+
+# Claude local settings
+.claude/settings.local.json
