@@ -301,7 +301,7 @@ function wireIframe(){
     const el = e.target;
     if(!el || !getSlideRoot(el)) return;
     e.preventDefault(); e.stopPropagation();
-    startInlineEdit(el);
+    startInlineEdit(el, e);
   }, true);
 
   // start drag on selected element
@@ -766,29 +766,61 @@ function rgbToHex(rgb){
 function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ============ Inline text edit ============
-function startInlineEdit(el){
+function startInlineEdit(el, clickEvent){
   if(!el) return;
-  // <br>만 자식인 텍스트 노드도 편집 허용
-  const onlyBR = Array.from(el.children).every(c => c.tagName === 'BR');
-  if(el.children.length > 0 && !onlyBR) return;
+  // .slide 자체는 편집 불가
+  if(el.classList && el.classList.contains('slide')) return;
+
   selectElement(el);
+  const originalHTML = el.innerHTML;            // ESC 취소용
+  const prevOutline = el.style.outline;
+  const prevBg = el.style.background;
+
   el.contentEditable = 'true';
+  el.style.outline = '2px dashed #00d4a0';
+  el.style.outlineOffset = '2px';
   el.focus();
-  const range = el.ownerDocument.createRange(); range.selectNodeContents(el);
-  const sel = el.ownerDocument.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-  // Enter는 <br> 삽입(브라우저 기본 <div>/<p> 삽입 방지)
+
+  // 더블클릭 위치에 커서 두기 (전체 선택 대신)
+  const fdoc = el.ownerDocument;
+  const sel = fdoc.getSelection();
+  sel.removeAllRanges();
+  let placed = false;
+  if(clickEvent && fdoc.caretRangeFromPoint){
+    const r = fdoc.caretRangeFromPoint(clickEvent.clientX, clickEvent.clientY);
+    if(r){ sel.addRange(r); placed = true; }
+  }
+  if(!placed){
+    const r = fdoc.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);   // 끝으로
+    sel.addRange(r);
+  }
+
+  let cancelled = false;
   const onKey = (ev) => {
-    if(ev.key === 'Enter' && !ev.shiftKey) {
+    if(ev.key === 'Enter' && !ev.shiftKey){
       ev.preventDefault();
-      el.ownerDocument.execCommand('insertLineBreak');
+      fdoc.execCommand('insertLineBreak');
+    } else if(ev.key === 'Escape'){
+      ev.preventDefault();
+      cancelled = true;
+      el.innerHTML = originalHTML;
+      el.blur();
+    } else if(ev.key === 'Tab'){
+      ev.preventDefault();
+      fdoc.execCommand('insertText', false, '  ');
     }
   };
   el.addEventListener('keydown', onKey);
+
   const stop = () => {
     el.contentEditable = 'false';
+    el.style.outline = prevOutline;
+    el.style.background = prevBg;
     el.removeEventListener('blur', stop);
     el.removeEventListener('keydown', onKey);
-    snapshot();
+    if(!cancelled) snapshot();
     renderProps();
   };
   el.addEventListener('blur', stop);
