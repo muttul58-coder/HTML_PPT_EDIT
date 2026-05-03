@@ -16,7 +16,7 @@ button{font-family:inherit;font-size:12px;}
 #right{background:#13161d;border-left:1px solid #262932;overflow-y:auto;overflow-x:hidden;padding:12px;min-width:0;}
 
 /* 툴바 */
-.tb-btn{background:#262932;color:#e8eaf2;border:1px solid #353945;border-radius:5px;padding:6px 12px;cursor:pointer;}
+.tb-btn{background:#262932;color:#e8eaf2;border:1px solid #353945;border-radius:5px;padding:6px 12px;cursor:pointer;text-decoration:none;display:inline-block;font-size:13px;}
 .tb-btn:hover{background:#353945;}
 .tb-btn:disabled{opacity:.4;cursor:not-allowed;}
 .tb-btn.primary{background:#00a37a;border-color:#00a37a;}
@@ -96,6 +96,8 @@ button{font-family:inherit;font-size:12px;}
     <span class="tb-sep"></span>
     <button class="tb-btn" id="btn-add-slide">+ 슬라이드 추가</button>
     <button class="tb-btn" id="btn-dup-slide">슬라이드 복제</button>
+    <span class="tb-sep"></span>
+    <a class="tb-btn" id="btn-prompt" href="ppt_prompt_template.md" download title="새 PPT 생성용 프롬프트 템플릿 다운로드 (.md)">📄 프롬프트 템플릿</a>
     <span style="flex:1;"></span>
     <span class="tb-label" id="hint">요소를 클릭하여 선택 · DEL 삭제 · Ctrl+D 복제 · ESC 해제</span>
   </div>
