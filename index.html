@@ -321,6 +321,7 @@ function wireIframe(){
 
   // keyboard inside iframe
   fdoc.addEventListener('keydown', handleKeydown);
+  fdoc.addEventListener('keyup', handleAltKeyup);
 }
 
 function getSlideRoot(el){
@@ -989,7 +990,14 @@ function handleKeydown(e){
     e.preventDefault();
   }
 }
+function handleAltKeyup(e){
+  // Chrome은 Alt keyup 시점에 메뉴바를 활성화하므로, 선택된 박스가 있으면 막는다
+  if((e.key==='Alt' || e.code==='AltLeft' || e.code==='AltRight') && state.selected){
+    e.preventDefault();
+  }
+}
 document.addEventListener('keydown', handleKeydown);
+document.addEventListener('keyup', handleAltKeyup);
 
 // ============ Export ============
 function serializeDoc(){
