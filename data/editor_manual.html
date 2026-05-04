@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML PPT Editor 사용 가이드</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&amp;family=JetBrains+Mono:wght@400;700&amp;family=Bebas+Neue&amp;display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0c10; --bg2:#111318; --bg3:#1c1f28;
+  --accent:#00d4a0; --purple:#7b5cf5; --orange:#f5a623;
+  --red:#ef4444; --blue:#3b82f6;
+  --text:#e8eaf2; --muted:#6b7280; --border:rgba(255,255,255,0.08);
+  --slide-w:1280px; --slide-h:800px;
+}
+*, *::before, *::after { box-sizing: border-box; }
+*{margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Noto Sans KR',sans-serif;color:var(--text);}
+p,span,div,li,td,th,h1,h2,h3,h4,h5,h6,strong,em,code,pre,label,a{color:inherit;}
+
+#viewer{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:#06080c;}
+#scale-wrap{width:var(--slide-w);height:var(--slide-h);position:relative;transform-origin:center center;}
+
+.slide{position:absolute;inset:0;width:var(--slide-w);height:var(--slide-h);overflow:hidden;display:none;background:var(--bg);color:var(--text);}
+.slide.active{display:flex;}
+.slide.ai {animation:sIn  .38s cubic-bezier(.4,0,.2,1) both;}
+.slide.ao {animation:sOut .38s cubic-bezier(.4,0,.2,1) both;}
+.slide.air{animation:sInR .38s cubic-bezier(.4,0,.2,1) both;}
+.slide.aor{animation:sOutR .38s cubic-bezier(.4,0,.2,1) both;}
+@keyframes sIn  {from{opacity:0;transform:translateX(56px)}  to{opacity:1;transform:none}}
+@keyframes sOut {from{opacity:1;transform:none} to{opacity:0;transform:translateX(-56px)}}
+@keyframes sInR {from{opacity:0;transform:translateX(-56px)} to{opacity:1;transform:none}}
+@keyframes sOutR{from{opacity:1;transform:none} to{opacity:0;transform:translateX(56px)}}
+
+.bg-grid{position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,212,160,0.028) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(0,212,160,0.028) 1px,transparent 1px);
+  background-size:40px 40px;}
+.glow{position:absolute;border-radius:50%;filter:blur(110px);pointer-events:none;}
+
+.si{padding:36px 60px;display:flex;flex-direction:column;flex:1;width:100%;}
+.sn{font-family:'Bebas Neue',sans-serif;font-size:13px;color:var(--muted);letter-spacing:4px;}
+.stag{display:inline-block;font-size:12px;letter-spacing:3px;text-transform:uppercase;padding:4px 10px;border-radius:4px;margin:8px 0 14px;font-weight:700;}
+.tg{background:rgba(0,212,160,0.14);color:var(--accent);}
+.tp{background:rgba(123,92,245,0.14);color:var(--purple);}
+.to{background:rgba(245,166,35,0.14);color:var(--orange);}
+.sh{font-size:32px;font-weight:700;letter-spacing:-1px;line-height:1.15;}
+.sd{font-size:14.5px;color:rgba(232,234,242,0.58);margin-top:6px;line-height:1.6;}
+
+.c2{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1;margin-top:18px;}
+.c3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;flex:1;margin-top:18px;}
+.col{display:flex;flex-direction:column;gap:10px;min-height:0;}
+
+.card{background:var(--bg2);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden;}
+.ct{position:absolute;left:0;top:0;width:100%;height:2px;}
+.ct-g{background:var(--accent);} .ct-p{background:var(--purple);} .ct-o{background:var(--orange);}
+.ct-b{background:var(--blue);} .ct-r{background:var(--red);}
+.ch{font-size:15px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+.cp{font-size:13px;color:rgba(232,234,242,0.68);line-height:1.65;}
+
+.hb{border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;}
+.hb .icon{font-size:18px;flex-shrink:0;}
+.hg{background:rgba(0,212,160,0.08);border-left:3px solid var(--accent);}
+.hp{background:rgba(123,92,245,0.08);border-left:3px solid var(--purple);}
+.ho{background:rgba(245,166,35,0.08);border-left:3px solid var(--orange);}
+.hb2{background:rgba(59,130,246,0.08);border-left:3px solid var(--blue);}
+.ht{font-size:13px;font-weight:700;margin-bottom:3px;}
+.hb p{font-size:12.5px;color:rgba(232,234,242,0.7);line-height:1.6;}
+
+.vstep{display:flex;flex-direction:column;}
+.vsi{display:flex;gap:10px;padding:7px 0;align-items:flex-start;}
+.vbadge{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;flex-shrink:0;color:#0a0c10;}
+.vb-g{background:var(--accent);} .vb-p{background:var(--purple);} .vb-o{background:var(--orange);} .vb-b{background:var(--blue);}
+.vt{flex:1;}
+.vt h4{font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:2px;}
+.vt p{font-size:12.5px;color:rgba(232,234,242,0.58);line-height:1.55;}
+
+code{font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:3px;font-size:12px;}
+.kbd{font-family:'JetBrains Mono',monospace;background:var(--bg3);border:1px solid var(--border);border-bottom-width:2px;padding:1px 7px;border-radius:4px;font-size:11.5px;font-weight:700;}
+
+.kicker{font-family:'JetBrains Mono',monospace;color:var(--accent);font-size:13px;letter-spacing:3px;font-weight:700;text-transform:uppercase;display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.kicker::before{content:'';width:30px;height:2px;background:var(--accent);}
+.badge{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);background:var(--bg2);padding:4px 10px;border-radius:4px;border:1px solid var(--border);}
+
+#ctrl{position:fixed;bottom:0;left:0;width:100%;height:48px;background:rgba(10,12,16,0.85);backdrop-filter:blur(8px);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:18px;z-index:100;}
+#ctrl button{background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-family:inherit;font-size:13px;}
+#ctrl button:hover{border-color:var(--accent);}
+#dn{display:flex;gap:6px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--bg3);cursor:pointer;}
+.dot.on{background:var(--accent);}
+#snum{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);min-width:50px;text-align:center;}
+</style>
+</head>
+<body>
+<div id="viewer">
+<div id="scale-wrap">
+
+<!-- ══ S0 · 표지 ══ -->
+<div class="slide active" id="s0">
+  <div class="bg-grid"></div>
+  <div class="glow" style="width:520px;height:520px;top:-140px;left:-80px;background:radial-gradient(circle,rgba(0,212,160,0.18),transparent 70%);opacity:.4;"></div>
+  <div class="glow" style="width:380px;height:380px;bottom:-80px;right:340px;background:radial-gradient(circle,rgba(123,92,245,0.14),transparent 70%);opacity:.3;"></div>
+
+  <div class="si" style="justify-content:center;padding-right:340px;">
+    <div class="kicker">HTML PPT EDITOR · USER GUIDE</div>
+    <div style="font-size:62px;font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:14px;color:var(--text);">
+      HTML PPT<br>
+      <span style="color:var(--accent);">Editor</span><br>
+      <span style="font-size:36px;color:rgba(232,234,242,0.4);font-weight:700;">3분 사용 가이드</span>
+    </div>
+    <p style="font-size:14.5px;color:rgba(232,234,242,0.55);line-height:1.85;max-width:480px;margin-bottom:20px;">
+      브라우저에서 동작하는 단일 파일 슬라이드 편집기.<br>
+      클릭으로 선택, 드래그로 이동, 핸들로 리사이즈.
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <span class="badge">Browser-only</span>
+      <span class="badge">No Install</span>
+      <span class="badge">Single HTML</span>
+      <span class="badge">Drag &amp; Resize</span>
+    </div>
+  </div>
+
+  <div style="position:absolute;right:0;top:0;width:300px;height:100%;background:rgba(0,212,160,0.04);border-left:1px solid var(--border);padding:50px 28px;display:flex;flex-direction:column;gap:14px;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;">CONTENTS</div>
+    <div style="display:flex;gap:10px;align-items:center;font-size:13px;"><span style="font-family:'Bebas Neue',sans-serif;color:var(--accent);font-size:18px;width:24px;">01</span><span>표지</span></div>
+    <div style="display:flex;gap:10px;align-items:center;font-size:13px;"><span style="font-family:'Bebas Neue',sans-serif;color:var(--muted);font-size:18px;width:24px;">02</span><span>기본 편집</span></div>
+    <div style="display:flex;gap:10px;align-items:center;font-size:13px;"><span style="font-family:'Bebas Neue',sans-serif;color:var(--muted);font-size:18px;width:24px;">03</span><span>저장 &amp; 워크플로</span></div>
+  </div>
+</div>
+
+<!-- ══ S1 · 기본 편집 ══ -->
+<div class="slide" id="s1">
+  <div class="bg-grid"></div>
+  <div class="glow" style="width:400px;height:400px;top:-100px;right:-60px;background:radial-gradient(circle,rgba(0,212,160,0.15),transparent 70%);opacity:.35;"></div>
+
+  <div class="si">
+    <div class="sn">2 / 3</div>
+    <span class="stag tg">EDITING · BASICS</span>
+    <div class="sh">기본 편집 — 선택 · 이동 · 리사이즈 · 텍스트</div>
+    <div class="sd">중앙 캔버스의 요소를 클릭해 선택하면 우측 패널에 속성이 나타납니다.</div>
+
+    <div class="c2">
+      <div class="col">
+        <div class="card">
+          <div class="ct ct-g"></div>
+          <div class="ch">🖱 선택 &amp; 이동</div>
+          <div class="vstep">
+            <div class="vsi"><div class="vbadge vb-g">1</div><div class="vt"><h4>요소 클릭</h4><p>마우스 오버 시 점선, 클릭 시 초록 핸들로 변경됩니다.</p></div></div>
+            <div class="vsi"><div class="vbadge vb-g">2</div><div class="vt"><h4>드래그로 이동</h4><p>선택된 요소 위에서 드래그하면 자동으로 <code>position:absolute</code>로 전환됩니다.</p></div></div>
+            <div class="vsi"><div class="vbadge vb-g">3</div><div class="vt"><h4>핸들로 리사이즈</h4><p>모서리·변의 8개 핸들을 끌어 크기 조절. 비율 유지는 모서리 핸들 사용.</p></div></div>
+          </div>
+        </div>
+        <div class="hb hp">
+          <span class="icon">⌨</span>
+          <div><div class="ht">키보드 단축키</div>
+          <p><span class="kbd">DEL</span> 삭제 · <span class="kbd">Ctrl</span>+<span class="kbd">D</span> 복제 · <span class="kbd">ESC</span> 선택 해제 · 방향키 1px nudge</p></div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="ct ct-p"></div>
+          <div class="ch">✏ 텍스트 편집</div>
+          <p class="cp">요소를 더블클릭하면 인라인 편집 모드로 들어갑니다. <code>Enter</code>로 줄바꿈, <code>Esc</code>로 종료. 우측 패널의 텍스트 영역에서 HTML 모드로 한 번에 수정할 수도 있습니다.</p>
+        </div>
+        <div class="card">
+          <div class="ct ct-o"></div>
+          <div class="ch">🎨 우측 속성 패널</div>
+          <p class="cp">위치(left/top), 크기(W/H), 폰트, 색상, line-height, letter-spacing 등을 직접 입력. <strong>적용 범위</strong> 셀렉터로 자식 요소까지 강제 덮어쓰기 가능.</p>
+        </div>
+        <div class="hb hg">
+          <span class="icon">💡</span>
+          <div><div class="ht">선택 우선순위</div>
+          <p>슬라이드 배경을 클릭하면 <code>.slide</code> 자체가 선택됩니다. 자식 요소를 선택하려면 그 요소 위에서 직접 클릭하세요.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ S2 · 저장 &amp; 워크플로 ══ -->
+<div class="slide" id="s2">
+  <div class="bg-grid"></div>
+  <div class="glow" style="width:420px;height:420px;bottom:-120px;left:-80px;background:radial-gradient(circle,rgba(245,166,35,0.13),transparent 70%);opacity:.35;"></div>
+
+  <div class="si">
+    <div class="sn">3 / 3</div>
+    <span class="stag to">WORKFLOW</span>
+    <div class="sh">저장 &amp; 워크플로 — 슬라이드 관리부터 새 PPT 생성까지</div>
+    <div class="sd">좌측 슬라이드 패널, 상단 툴바, 프롬프트 템플릿을 함께 활용합니다.</div>
+
+    <div class="c2">
+      <div class="col">
+        <div class="card">
+          <div class="ct ct-b"></div>
+          <div class="ch">📁 슬라이드 관리</div>
+          <div class="vstep">
+            <div class="vsi"><div class="vbadge vb-b">L</div><div class="vt"><h4>좌측 패널</h4><p>썸네일 클릭으로 슬라이드 이동. 휴지통 아이콘으로 삭제, 드래그로 순서 변경.</p></div></div>
+            <div class="vsi"><div class="vbadge vb-b">+</div><div class="vt"><h4>새 슬라이드 추가</h4><p>상단 툴바의 <strong>+ 슬라이드</strong> 버튼으로 빈 슬라이드 추가, <strong>복제</strong>로 현재 슬라이드 통째 복사.</p></div></div>
+          </div>
+        </div>
+        <div class="hb hb2">
+          <span class="icon">↩</span>
+          <div><div class="ht">실행 취소 / 재실행</div>
+          <p><span class="kbd">Ctrl</span>+<span class="kbd">Z</span> 취소, <span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">Z</span> 재실행. 모든 편집은 히스토리에 자동 기록됩니다.</p></div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="ct ct-o"></div>
+          <div class="ch">💾 저장 &amp; 불러오기</div>
+          <p class="cp">상단 툴바의 <strong>저장</strong> 버튼으로 단일 HTML 파일 다운로드. 파일명은 <code>원본_edited.html</code> 형식. <strong>파일 열기</strong>로 다른 HTML PPT 불러와 편집 시작.</p>
+        </div>
+        <div class="card">
+          <div class="ct ct-g"></div>
+          <div class="ch">📄 새 PPT는 프롬프트 템플릿으로</div>
+          <p class="cp">툴바의 <strong>📄 프롬프트 템플릿</strong> 버튼을 눌러 <code>.md</code> 파일을 받은 뒤, ChatGPT/Claude에 붙여넣고 주제만 추가하면 편집기 호환 HTML이 생성됩니다.</p>
+        </div>
+        <div class="hb ho">
+          <span class="icon">⚠</span>
+          <div><div class="ht">주의</div>
+          <p>저장은 브라우저 다운로드로만 이뤄집니다. 자동 저장 없음 — 큰 변경 후에는 수시로 저장하세요.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /scale-wrap -->
+</div><!-- /viewer -->
+
+<div id="ctrl">
+  <button id="prev">◀ 이전</button>
+  <div id="dn"></div>
+  <span id="snum">1 / 3</span>
+  <button id="next">다음 ▶</button>
+</div>
+
+<script>
+(function(){
+  const TOTAL = 3;
+  let cur = 0, anim = false;
+  const slides = document.querySelectorAll('.slide');
+  const dn = document.getElementById('dn');
+  const snum = document.getElementById('snum');
+
+  for(let i=0;i<TOTAL;i++){
+    const d = document.createElement('div');
+    d.className = 'dot' + (i===0?' on':'');
+    d.addEventListener('click', () => go(i, i>cur?1:-1));
+    dn.appendChild(d);
+  }
+
+  function go(nx, dir){
+    if(anim || nx===cur || nx<0 || nx>=TOTAL) return;
+    anim = true;
+    const outCls = dir>0?'ao':'aor';
+    const inCls  = dir>0?'ai':'air';
+    slides[cur].classList.add(outCls);
+    slides[nx].classList.add('active', inCls);
+    setTimeout(() => {
+      slides[cur].classList.remove('active', outCls);
+      slides[nx].classList.remove(inCls);
+      cur = nx;
+      snum.textContent = (cur+1) + ' / ' + TOTAL;
+      dn.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on', i===cur));
+      anim = false;
+    }, 400);
+  }
+
+  document.getElementById('prev').addEventListener('click', () => go(cur-1, -1));
+  document.getElementById('next').addEventListener('click', () => go(cur+1, 1));
+  document.addEventListener('keydown', e => {
+    if(e.key==='ArrowRight'||e.key==='ArrowDown'){ e.preventDefault(); go(cur+1, 1); }
+    else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){ e.preventDefault(); go(cur-1, -1); }
+  });
+
+  function rescale(){
+    const vw = window.innerWidth, vh = window.innerHeight - 48;
+    const scale = Math.min(vw/1280, vh/800);
+    const w = document.getElementById('scale-wrap');
+    if(w){
+      w.style.transform = 'scale(' + scale + ')';
+      w.style.marginTop = Math.max(0, (vh - 800*scale)/2) + 'px';
+    }
+  }
+  window.addEventListener('resize', rescale);
+  rescale();
+})();
+</script>
+</body></html>
