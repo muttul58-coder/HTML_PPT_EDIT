@@ -38,8 +38,8 @@ button{font-family:inherit;font-size:12px;}
 
 /* 캔버스 */
 #canvas-wrap{position:relative;}
-#frame{width:1280px;height:720px;border:none;background:#000;display:block;box-shadow:0 0 80px rgba(0,0,0,0.6);}
-#overlay{position:absolute;top:0;left:0;width:1280px;height:720px;pointer-events:none;}
+#frame{width:1280px;height:800px;border:none;background:#000;display:block;box-shadow:0 0 80px rgba(0,0,0,0.6);}
+#overlay{position:absolute;top:0;left:0;width:1280px;height:800px;pointer-events:none;}
 .sel-box{position:absolute;border:2px solid #00d4a0;pointer-events:none;}
 .handle{position:absolute;width:10px;height:10px;background:#fff;border:2px solid #00d4a0;border-radius:2px;pointer-events:auto;cursor:pointer;z-index:10;}
 .handle.h-nw{cursor:nwse-resize;} .handle.h-ne{cursor:nesw-resize;}
@@ -185,7 +185,7 @@ async function loadDefault(force){
     const defaultHTML = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>New PPT</title>
 <style>
-.slide{display:none;width:1280px;height:720px;background:#0b0e17;color:#e8eaf2;font-family:'Segoe UI','Malgun Gothic',sans-serif;position:absolute;top:0;left:0;}
+.slide{display:none;width:1280px;height:800px;background:#0b0e17;color:#e8eaf2;font-family:'Segoe UI','Malgun Gothic',sans-serif;position:absolute;top:0;left:0;}
 .slide.active{display:flex;align-items:center;justify-content:center;font-size:48px;}
 </style>
 </head><body>
@@ -539,7 +539,7 @@ function renderHandles(){
   const fdoc = $('frame').contentDocument; if(!fdoc) return;
   const elRect = el.getBoundingClientRect();
   const slideRect = slide.getBoundingClientRect();
-  // coordinates within slide (which equals overlay coordinates because overlay is 1280x720 above frame)
+  // coordinates within slide (which equals overlay coordinates because overlay is 1280x800 above frame)
   const left = elRect.left - slideRect.left;
   const top  = elRect.top  - slideRect.top;
   const w = elRect.width, h = elRect.height;
@@ -570,7 +570,7 @@ function fitCanvas(){
   const wrap = $('canvas-wrap');
   const pad = 40;
   const sx = (c.clientWidth - pad)/1280;
-  const sy = (c.clientHeight - pad)/720;
+  const sy = (c.clientHeight - pad)/800;
   const s = Math.min(1, Math.min(sx, sy));
   wrap.style.transform = `scale(${s})`;
   wrap.style.transformOrigin = 'center center';
@@ -945,7 +945,7 @@ function go(nx,dir){if(anim||nx===cur||nx<0||nx>=TOTAL)return;anim=true;const fw
 function next(){go(cur+1,1);}function prev(){go(cur-1,-1);}
 function upd(){const bp=document.getElementById('bp'),bn=document.getElementById('bn'),sc=document.getElementById('sc');if(bp)bp.disabled=cur===0;if(bn)bn.disabled=cur===TOTAL-1;if(sc)sc.textContent=(cur+1)+' / '+TOTAL;}
 document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowDown')next();if(e.key==='ArrowLeft'||e.key==='ArrowUp')prev();});
-function rescale(){const vw=window.innerWidth,vh=window.innerHeight-48;const scale=Math.min(vw/1280,vh/720);const w=document.getElementById('scale-wrap');if(w){w.style.transform='scale('+scale+')';w.style.marginTop=Math.max(0,(vh-720*scale)/2)+'px';}}
+function rescale(){const vw=window.innerWidth,vh=window.innerHeight-48;const scale=Math.min(vw/1280,vh/800);const w=document.getElementById('scale-wrap');if(w){w.style.transform='scale('+scale+')';w.style.marginTop=Math.max(0,(vh-800*scale)/2)+'px';}}
 window.addEventListener('resize',rescale);rescale();upd();
 slides.forEach((s,i)=>{s.style.display=(i===0)?'flex':'none';});
 slides[0].classList.add('active');
