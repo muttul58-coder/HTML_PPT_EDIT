@@ -956,7 +956,10 @@ function handleKeydown(e){
   if(inField) return;
 
   // Alt 단독 keydown은 브라우저 메뉴로 포커스를 옮기므로, 선택된 박스가 있을 때 막는다
-  if((e.key==='Alt' || e.code==='AltLeft' || e.code==='AltRight') && state.selected){ e.preventDefault(); return; }
+  if(e.key==='Alt' || e.code==='AltLeft' || e.code==='AltRight'){
+    state.altDown = true;
+    if(state.selected){ e.preventDefault(); return; }
+  }
 
   if(e.key==='Escape'){ clearSelection(); return; }
   if(e.key==='Delete' || e.key==='Backspace'){ deleteSelected(); e.preventDefault(); return; }
@@ -971,7 +974,9 @@ function handleKeydown(e){
     if(el.classList && el.classList.contains('slide')) return;
     ensureAbs(el);
     const step = e.shiftKey ? 10 : 1;
-    if(e.altKey){
+    const altHeld = e.altKey || (e.getModifierState && e.getModifierState('Alt')) || state.altDown;
+    console.log('[arrow]', e.key, 'altKey=', e.altKey, 'mod=', e.getModifierState&&e.getModifierState('Alt'), 'flag=', state.altDown, '=> altHeld=', altHeld);
+    if(altHeld){
       let w = parseFloat(el.style.width)  || el.offsetWidth;
       let h = parseFloat(el.style.height) || el.offsetHeight;
       if(e.key==='ArrowLeft')  w = Math.max(1, w - step);
@@ -992,8 +997,9 @@ function handleKeydown(e){
 }
 function handleAltKeyup(e){
   // Chrome은 Alt keyup 시점에 메뉴바를 활성화하므로, 선택된 박스가 있으면 막는다
-  if((e.key==='Alt' || e.code==='AltLeft' || e.code==='AltRight') && state.selected){
-    e.preventDefault();
+  if(e.key==='Alt' || e.code==='AltLeft' || e.code==='AltRight'){
+    state.altDown = false;
+    if(state.selected) e.preventDefault();
   }
 }
 document.addEventListener('keydown', handleKeydown);
