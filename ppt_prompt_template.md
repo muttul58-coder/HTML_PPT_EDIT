@@ -248,6 +248,105 @@ Google Fonts CDN 사용:
 - ❌ `<p>첫 줄</p><p>두번째 줄</p>` (분리하면 편집 단위가 나뉨)
 → 편집기에서 Enter 키로 자연스럽게 줄바꿈 가능
 
+## ⓬ C# 소스코드 컬러 (Visual Studio Dark 테마 기반)
+
+C#·Unity 코드를 보여줄 때는 아래 규칙으로 토큰별 색상을 입혀라.
+인라인 `<code>` 한 줄짜리, 그리고 여러 줄 `<pre><code>` 블록 모두 동일하게 적용.
+
+### 토큰 색상 팔레트 (CSS 변수로 :root에 추가)
+
+```
+:root {
+  --cs-keyword:  #569cd6;   /* public, void, class, if, return, await, using, namespace, var */
+  --cs-control:  #c586c0;   /* if, else, for, foreach, while, return, yield, throw, await, async (제어 키워드) */
+  --cs-type:     #4ec9b0;   /* string, int, bool, void, NetworkVariable, Lobby, MonoBehaviour 등 타입 */
+  --cs-string:   #ce9178;   /* "문자열", $"보간문자열", '문자' */
+  --cs-number:   #b5cea8;   /* 숫자 리터럴, true/false/null */
+  --cs-method:   #dcdcaa;   /* 메서드/함수 이름 (정의·호출) */
+  --cs-prop:     #9cdcfe;   /* 변수, 매개변수, 속성, 필드 */
+  --cs-comment:  #6a9955;   /* // 주석, /* 블록주석 */
+  --cs-attr:     #c8c8c8;   /* [Attribute], [ServerRpc] 등 어트리뷰트 */
+  --cs-punct:    #d4d4d4;   /* 괄호, 콤마, 세미콜론 */
+}
+```
+
+### 코드 블록 컨테이너 스타일
+
+```
+pre.cs, code.cs-block {
+  font-family:'JetBrains Mono', monospace;
+  font-size:13px;
+  line-height:1.65;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:14px 16px;
+  color:var(--cs-punct);
+  white-space:pre;
+  overflow:hidden;
+}
+```
+
+### 토큰 마크업 — 각 토큰을 `<span>` + 색상 클래스로 감싼다
+
+```
+.cs-k  { color:var(--cs-keyword); }   /* keyword */
+.cs-c  { color:var(--cs-control); font-weight:500; }   /* control */
+.cs-t  { color:var(--cs-type); }      /* type */
+.cs-s  { color:var(--cs-string); }    /* string */
+.cs-n  { color:var(--cs-number); }    /* number */
+.cs-m  { color:var(--cs-method); }    /* method */
+.cs-p  { color:var(--cs-prop); }      /* property/variable */
+.cs-cm { color:var(--cs-comment); font-style:italic; }   /* comment */
+.cs-a  { color:var(--cs-attr); }      /* attribute */
+```
+
+### 마크업 예시 (한 줄 인라인)
+
+```
+<code class="cs-block">
+<span class="cs-k">public</span> <span class="cs-k">async</span> <span class="cs-t">Task</span>&lt;<span class="cs-t">Lobby</span>&gt; <span class="cs-m">CreateLobbyAsync</span>(<span class="cs-t">string</span> <span class="cs-p">name</span>, <span class="cs-t">int</span> <span class="cs-p">maxPlayers</span>)
+</code>
+```
+
+### 마크업 예시 (여러 줄 블록)
+
+```
+<pre class="cs">
+<span class="cs-a">[ServerRpc]</span>
+<span class="cs-k">public</span> <span class="cs-k">void</span> <span class="cs-m">SubmitScoreServerRpc</span>(<span class="cs-t">int</span> <span class="cs-p">score</span>)
+{
+    <span class="cs-cm">// 서버에서만 실행됨</span>
+    <span class="cs-p">_score</span>.<span class="cs-p">Value</span> += <span class="cs-p">score</span>;
+    <span class="cs-c">if</span> (<span class="cs-p">_score</span>.<span class="cs-p">Value</span> &gt; <span class="cs-n">100</span>)
+        <span class="cs-m">BroadcastWinClientRpc</span>(<span class="cs-s">"Game Over"</span>);
+}
+</pre>
+```
+
+### 토큰 분류 규칙 (반드시 이 매핑으로)
+
+| 토큰 종류 | 클래스 | 예시 |
+|---------|--------|------|
+| 선언/접근 키워드 | `cs-k` | `public`, `private`, `static`, `class`, `void`, `var`, `using`, `namespace`, `new`, `this`, `base`, `async`, `await` |
+| 제어 키워드 | `cs-c` | `if`, `else`, `for`, `foreach`, `while`, `return`, `yield`, `throw`, `try`, `catch`, `switch`, `case` |
+| 타입 | `cs-t` | `string`, `int`, `bool`, `float`, `double`, `Task`, `List`, `Lobby`, `NetworkVariable`, 사용자 정의 클래스/인터페이스 |
+| 문자열 | `cs-s` | `"text"`, `$"interp{x}"`, `@"raw"` (보간식 안 변수는 `cs-p`로 다시 감쌈) |
+| 숫자/리터럴 | `cs-n` | `42`, `3.14f`, `true`, `false`, `null` |
+| 메서드 | `cs-m` | 정의된/호출된 함수 이름 (`Start`, `CreateLobbyAsync`, `Debug.Log`의 `Log`) |
+| 변수/속성 | `cs-p` | 매개변수, 지역변수, 필드, 속성 (`name`, `_score`, `Value`) |
+| 주석 | `cs-cm` | `// ...`, `/* ... */` |
+| 어트리뷰트 | `cs-a` | `[ServerRpc]`, `[SerializeField]` 전체를 한 span으로 |
+| 구두점·기타 | (감싸지 않음) | `(`, `)`, `,`, `;`, `=`, `+`, `.` 등 — `pre.cs`의 기본 색(`--cs-punct`) 사용 |
+
+### 주의
+
+- 한 코드 블록에서 같은 식별자라도 **선언 위치는 `cs-m` 또는 `cs-p`, 사용 위치도 동일 클래스** 유지 → 색이 깜빡이지 않음
+- `<` `>` 는 HTML 충돌 방지로 `&lt;` `&gt;` 사용
+- 들여쓰기는 공백 4칸 (탭 사용 금지)
+- 줄바꿈은 그냥 개행 — `pre`가 보존
+- 인라인 한 줄 코드 (`<code>` 단독)는 클래스 없이 그냥 텍스트만으로 두고, **여러 줄 또는 강조하고 싶은 한 줄**에만 토큰 색상 적용
+
 ```
 
 ---
