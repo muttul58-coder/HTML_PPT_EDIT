@@ -954,6 +954,9 @@ function handleKeydown(e){
   const inField = (t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable));
   if(inField) return;
 
+  // Alt 단독 keydown은 브라우저 메뉴로 포커스를 옮기므로, 선택된 박스가 있을 때 막는다
+  if((e.key==='Alt' || e.code==='AltLeft' || e.code==='AltRight') && state.selected){ e.preventDefault(); return; }
+
   if(e.key==='Escape'){ clearSelection(); return; }
   if(e.key==='Delete' || e.key==='Backspace'){ deleteSelected(); e.preventDefault(); return; }
   if((e.ctrlKey||e.metaKey) && e.key==='d'){ duplicateSelected(); e.preventDefault(); return; }
