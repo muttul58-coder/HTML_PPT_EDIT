@@ -457,14 +457,18 @@ function makeAbsolute(el){
   const newLeft = elRect.left - targetRect.left;
   const newTop  = elRect.top  - targetRect.top;
 
-  // paint 순서 보존: DOM에서 이 요소 뒤에 정적/relative 형제가 있으면
-  // absolute로 전환한 뒤에도 그 형제들 아래에 머물러야 함 → z-index:-1
+  // paint 순서 보존: 이 요소가 뒤쪽 정적/relative 형제를 시각적으로 "감싸는" 프레임이면
+  // (later sibling의 rect가 el rect 안에 들어가면) absolute 전환 후에도 뒤에 남아야 함 → z-index:-1
+  // 단순히 옆에 나란히 있는 작은 요소(체크 표시 등)는 영향 없음.
   const win = el.ownerDocument.defaultView;
   const elIdx = Array.from(el.parentNode.children).indexOf(el);
-  const hasLaterFlowSibling = Array.from(el.parentNode.children).slice(elIdx+1).some(s => {
+  const isWrappingFrame = Array.from(el.parentNode.children).slice(elIdx+1).some(s => {
     if(s.hasAttribute && s.hasAttribute('data-edit-spacer')) return false;
     const p = win.getComputedStyle(s).position;
-    return p === 'static' || p === 'relative';
+    if(p !== 'static' && p !== 'relative') return false;
+    const sr = s.getBoundingClientRect();
+    return sr.left >= elRect.left && sr.right <= elRect.right
+        && sr.top  >= elRect.top  && sr.bottom <= elRect.bottom;
   });
 
   // 형제 요소가 빈 자리로 밀려오지 않도록 같은 크기의 spacer를 원래 자리에 삽입
@@ -493,7 +497,7 @@ function makeAbsolute(el){
   el.style.top  = newTop + 'px';
   el.style.width = w + 'px';
   el.style.height = h + 'px';
-  if(hasLaterFlowSibling && !el.style.zIndex){
+  if(isWrappingFrame && !el.style.zIndex){
     el.style.zIndex = '-1';
   }
 }
