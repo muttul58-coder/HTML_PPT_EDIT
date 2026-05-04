@@ -582,10 +582,11 @@ function renderHandles(){
   const slide = getSlideRoot(el); if(!slide) return;
   const fdoc = $('frame').contentDocument; if(!fdoc) return;
   const elRect = el.getBoundingClientRect();
-  const slideRect = slide.getBoundingClientRect();
-  // coordinates within slide (which equals overlay coordinates because overlay is 1280x800 above frame)
-  const left = elRect.left - slideRect.left;
-  const top  = elRect.top  - slideRect.top;
+  // overlay와 iframe은 모두 canvas-wrap (0,0)에 정렬되고 같은 1280x800 크기이므로
+  // iframe 내부 viewport 좌표(getBoundingClientRect)를 그대로 overlay 좌표로 쓰면 정확히 겹친다.
+  // 이전엔 슬라이드 기준 좌표로 계산해 body 마진/슬라이드 오프셋만큼 어긋났음.
+  const left = elRect.left;
+  const top  = elRect.top;
   const w = elRect.width, h = elRect.height;
 
   const box = document.createElement('div');
