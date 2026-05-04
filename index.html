@@ -99,7 +99,7 @@ button{font-family:inherit;font-size:12px;}
     <span class="tb-sep"></span>
     <a class="tb-btn" id="btn-prompt" href="ppt_prompt_template.md" download title="새 PPT 생성용 프롬프트 템플릿 다운로드 (.md)">📄 프롬프트 템플릿</a>
     <span style="flex:1;"></span>
-    <span class="tb-label" id="hint">요소를 클릭하여 선택 · DEL 삭제 · Ctrl+D 복제 · ESC 해제</span>
+    <span class="tb-label" id="hint">클릭 선택 · 방향키 이동(Shift=10px) · Alt+방향키 크기 변경 · DEL 삭제 · Ctrl+D 복제 · ESC 해제</span>
   </div>
   <div id="left">
     <div class="sp-head">SLIDES</div>
@@ -961,16 +961,27 @@ function handleKeydown(e){
   if((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.shiftKey && e.key==='Z'))){ redo(); e.preventDefault(); return; }
   if((e.ctrlKey||e.metaKey) && e.key==='s'){ exportHTML(); e.preventDefault(); return; }
 
-  // arrow nudging
+  // arrow nudging (이동) / Alt+arrow (크기 변경, top-left 고정)
   const el = state.selected;
   if(el && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
     if(el.classList && el.classList.contains('slide')) return;
     ensureAbs(el);
     const step = e.shiftKey ? 10 : 1;
-    if(e.key==='ArrowLeft')  el.style.left = (parseFloat(el.style.left)-step)+'px';
-    if(e.key==='ArrowRight') el.style.left = (parseFloat(el.style.left)+step)+'px';
-    if(e.key==='ArrowUp')    el.style.top  = (parseFloat(el.style.top)-step)+'px';
-    if(e.key==='ArrowDown')  el.style.top  = (parseFloat(el.style.top)+step)+'px';
+    if(e.altKey){
+      let w = parseFloat(el.style.width)  || el.offsetWidth;
+      let h = parseFloat(el.style.height) || el.offsetHeight;
+      if(e.key==='ArrowLeft')  w = Math.max(1, w - step);
+      if(e.key==='ArrowRight') w = w + step;
+      if(e.key==='ArrowUp')    h = Math.max(1, h - step);
+      if(e.key==='ArrowDown')  h = h + step;
+      el.style.width  = w + 'px';
+      el.style.height = h + 'px';
+    } else {
+      if(e.key==='ArrowLeft')  el.style.left = (parseFloat(el.style.left)-step)+'px';
+      if(e.key==='ArrowRight') el.style.left = (parseFloat(el.style.left)+step)+'px';
+      if(e.key==='ArrowUp')    el.style.top  = (parseFloat(el.style.top)-step)+'px';
+      if(e.key==='ArrowDown')  el.style.top  = (parseFloat(el.style.top)+step)+'px';
+    }
     renderHandles(); syncPropFields();
     e.preventDefault();
   }
