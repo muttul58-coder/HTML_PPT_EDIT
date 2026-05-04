@@ -726,7 +726,9 @@ function renderProps(){
         </select>
       </div>
     </div>
-    ${isLeaf?`<div class="ph">텍스트 <span style="color:#888;font-weight:400">${textHint}</span></div><div class="field"><textarea id="f-text" rows="4">${escapeHTML(text)}</textarea></div>`:''}
+    ${isLeaf?`<div class="ph">텍스트 <span style="color:#888;font-weight:400">${textHint}</span></div>
+    <div class="row-btns" style="margin:0 0 4px"><button class="mini-btn" id="b-nbsp" title="커서 위치에 &amp;nbsp; 삽입 (HTML 모드에서 공백 보존)">+ &amp;nbsp;</button></div>
+    <div class="field"><textarea id="f-text" rows="4">${escapeHTML(text)}</textarea></div>`:''}
     <div class="ph">고급</div>
     <div class="field"><label>style 직접 편집</label><textarea id="f-style" rows="3">${escapeHTML(el.getAttribute('style')||'')}</textarea></div>
     <div class="row-btns">
@@ -778,6 +780,18 @@ function renderProps(){
   };
   bind('f-lh', e => { applyToScope('lineHeight', e.target.value); renderHandles(); });
   bind('f-ls', e => { applyToScope('letterSpacing', e.target.value+'px'); renderHandles(); });
+  if(isLeaf){
+    const nbspBtn = $('b-nbsp');
+    if(nbspBtn) nbspBtn.onclick = () => {
+      const ta = $('f-text'); if(!ta) return;
+      const s = ta.selectionStart, e = ta.selectionEnd;
+      const v = ta.value;
+      ta.value = v.slice(0,s) + '&nbsp;' + v.slice(e);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = s + 6;
+      ta.dispatchEvent(new Event('input', {bubbles:true}));
+    };
+  }
   if(isLeaf) bind('f-text', e => {
     if(isPlainText){
       // plain 모드: <, >, & escape + \n → <br>
