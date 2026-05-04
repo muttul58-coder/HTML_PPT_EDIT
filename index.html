@@ -257,7 +257,7 @@ function buildFrameHTML(activeIdx){
     #scale-wrap{transform:none!important;margin:0!important;}
     #ctrl,#kbh{display:none!important;}
     .slide.ai,.slide.ao,.slide.air,.slide.aor{animation:none!important;}
-    [data-edit-hover]{outline:1px dashed #00d4a0;outline-offset:-1px;}
+    [data-edit-hover]:not([data-edit-selected]){outline:1px dashed #00d4a0;outline-offset:-1px;}
   `;
   clone.head.appendChild(style);
   return '<!DOCTYPE html>\n' + clone.documentElement.outerHTML;
@@ -457,6 +457,16 @@ function makeAbsolute(el){
   const newLeft = elRect.left - targetRect.left;
   const newTop  = elRect.top  - targetRect.top;
 
+  // paint 순서 보존: DOM에서 이 요소 뒤에 정적/relative 형제가 있으면
+  // absolute로 전환한 뒤에도 그 형제들 아래에 머물러야 함 → z-index:-1
+  const win = el.ownerDocument.defaultView;
+  const elIdx = Array.from(el.parentNode.children).indexOf(el);
+  const hasLaterFlowSibling = Array.from(el.parentNode.children).slice(elIdx+1).some(s => {
+    if(s.hasAttribute && s.hasAttribute('data-edit-spacer')) return false;
+    const p = win.getComputedStyle(s).position;
+    return p === 'static' || p === 'relative';
+  });
+
   // 형제 요소가 빈 자리로 밀려오지 않도록 같은 크기의 spacer를 원래 자리에 삽입
   // (flex/grid 부모도 동일하게 동작 — 자리 점유만 하고 시각적으로는 보이지 않음)
   if(!el.previousElementSibling || !el.previousElementSibling.hasAttribute('data-edit-spacer')){
@@ -483,6 +493,9 @@ function makeAbsolute(el){
   el.style.top  = newTop + 'px';
   el.style.width = w + 'px';
   el.style.height = h + 'px';
+  if(hasLaterFlowSibling && !el.style.zIndex){
+    el.style.zIndex = '-1';
+  }
 }
 
 function startDragMove(e){
