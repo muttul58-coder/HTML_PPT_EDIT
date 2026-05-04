@@ -975,7 +975,6 @@ function handleKeydown(e){
     ensureAbs(el);
     const step = e.shiftKey ? 10 : 1;
     const altHeld = e.altKey || (e.getModifierState && e.getModifierState('Alt')) || state.altDown;
-    console.log('[arrow]', e.key, 'altKey=', e.altKey, 'mod=', e.getModifierState&&e.getModifierState('Alt'), 'flag=', state.altDown, '=> altHeld=', altHeld);
     if(altHeld){
       let w = parseFloat(el.style.width)  || el.offsetWidth;
       let h = parseFloat(el.style.height) || el.offsetHeight;
