@@ -132,7 +132,36 @@ let cur = 0, anim = false;
 // 클래스: .ai(앞으로 in) / .ao(앞으로 out) / .air(뒤로 in) / .aor(뒤로 out)
 // setTimeout 400ms 후 정리
 // 키보드: ArrowRight/Down = next, ArrowLeft/Up = prev
-// rescale(): transform:scale()로 뷰포트 맞춤 (하단 48px 컨트롤 바 제외)
+
+### rescale() — 정확히 이 코드 사용 (숫자 변경 금지)
+
+슬라이드 높이 800은 ❷의 `--slide-h:800px` 와 반드시 같은 값. 720·1080 등 다른 숫자 사용 금지.
+
+```
+function rescale(){
+  const vw = window.innerWidth;
+  const vh = window.innerHeight - 48;          // 48 = 컨트롤 바 높이
+  const scale = Math.min(vw/1280, vh/800);     // 1280×800 고정 — ❷ 변수와 동일
+  const w = document.getElementById('scale-wrap');
+  if(w){
+    w.style.transform = 'scale(' + scale + ')';
+    w.style.marginTop = Math.max(0, (vh - 800*scale)/2) + 'px';
+  }
+}
+window.addEventListener('resize', rescale);
+rescale();
+```
+
+## ❺-1 크기 일관성 (반드시 동일 값)
+
+다음 네 곳의 슬라이드 크기 값은 **반드시 모두 1280 × 800** 으로 일치해야 한다. 한 곳이라도 다르면 편집기에서 호버 outline과 클릭 셀렉션 위치가 어긋남.
+
+1. `:root` 의 `--slide-w:1280px; --slide-h:800px;`
+2. `.slide` 의 `width:var(--slide-w); height:var(--slide-h);`
+3. `#scale-wrap` 의 `width:var(--slide-w); height:var(--slide-h);`
+4. `rescale()` 안의 `Math.min(vw/1280, vh/800)` 와 `(vh - 800*scale)/2`
+
+→ CSS 변수만 바꾸면 끝나는 게 아니라 `rescale()` 안의 **하드코드된 숫자 800도 함께** 바꿔야 함을 잊지 말 것.
 
 ## ❻ HTML 슬라이드 구조 템플릿
 
@@ -179,6 +208,37 @@ let cur = 0, anim = false;
 - gap: 5~10px (내용 많을 때 5px)
 - 폰트 크기: 최소 12px (가독성 한계)
 - 내용이 많은 슬라이드는 반드시 2단(c2) 분할 사용
+
+## ❽-1 슬라이드 밖으로 잘림 방지 (필수 검증 단계)
+
+**각 슬라이드를 작성한 직후, 다음 점검을 반드시 통과해야 한다.** 통과 못하는 슬라이드는 내용을 줄이거나 **슬라이드를 2장 이상으로 분할**하라. 사용자가 지정한 슬라이드 수는 **하한선이 아니라 권장치**이며, 잘림 방지를 위해 **장 수를 늘리는 것은 허용된다(권장된다)**. `.sn`과 TOTAL은 분할 후 최종 장 수에 맞춰 다시 번호를 매긴다.
+
+### 점검 항목 (한 슬라이드라도 실패 시 분할)
+
+1. **세로 합산 < 728px**: 헤더(96px) + 본문 그리드 행 높이 합 + gap 합 ≤ 728
+2. **카드 내부 텍스트 줄 수**:
+   - `.cp` (14px, line-height 1.65): 카드 폭 기준 한 줄에 약 38~42자(한글 기준) → 줄 수 × 23px 누적
+   - `.vt p` (12.5px, line-height 1.55): 한 줄 약 19px
+3. **vstep 아이템 수**: 한 카드 안 vsi ≤ 5개 (각 약 38px 차지)
+4. **코드 블록**: `pre.cs` 한 줄 약 22px × 줄 수 + padding 28px → 14줄 초과 시 분할
+5. **한 카드의 본문 px 합 + 카드 padding(36px) ≤ 부모 col 가용 높이**
+6. **2단 그리드(c2)에서 좌·우 col 중 더 긴 쪽이 632px 초과 금지**
+
+### 분할 트리거 (둘 중 하나라도 해당하면 분할)
+
+- 한 슬라이드에 카드 4개 이상 + 카드마다 본문 3줄 이상
+- vstep 아이템 6개 이상
+- 비교 테이블 행 9개 이상
+- 코드 블록 15줄 이상
+- "주제 요청"의 한 토픽이 위 조건에 걸리면 → **`토픽 — Part 1`, `토픽 — Part 2` 로 분할**하고 .stag 라벨에 `· PART N` 표기
+
+### 분할 시 처리
+
+- TOTAL 상수, 점 네비게이션, `.sn` 표기(`N / 전체수`)를 새 장 수로 모두 재계산
+- 표지(s0)의 인덱스 목록도 갱신
+- 분할로 새로 생긴 슬라이드는 헤더(.sh)에 동일 주제명 + ` — 이어서` 또는 ` · PART 2` 같은 보조 표기
+
+> 사용자가 "정확히 N장"을 명시하지 않은 한, **잘림 방지가 장 수 일치보다 우선한다.** 잘림이 예상되면 망설이지 말고 분할할 것.
 
 ## ❾ 금지 사항
 
