@@ -453,18 +453,35 @@ function makeAbsolute(el){
   const w = elRect.width;
   const h = elRect.height;
 
-  // box-sizing: border-box로 통일 → W/H 값이 실제 박스 크기와 일치
+  const target = el.offsetParent || slide;
+  const targetRect = target.getBoundingClientRect();
+  const newLeft = elRect.left - targetRect.left;
+  const newTop  = elRect.top  - targetRect.top;
+
+  // 형제 요소가 빈 자리로 밀려오지 않도록 같은 크기의 spacer를 원래 자리에 삽입
+  // (flex/grid 부모도 동일하게 동작 — 자리 점유만 하고 시각적으로는 보이지 않음)
+  if(!el.previousElementSibling || !el.previousElementSibling.hasAttribute('data-edit-spacer')){
+    const doc = el.ownerDocument;
+    const cs = doc.defaultView.getComputedStyle(el);
+    const spacer = doc.createElement('div');
+    spacer.setAttribute('data-edit-spacer','');
+    spacer.style.width = w + 'px';
+    spacer.style.height = h + 'px';
+    spacer.style.margin = cs.margin;
+    if(cs.flex && cs.flex !== '0 1 auto') spacer.style.flex = cs.flex;
+    if(cs.gridColumn && cs.gridColumn !== 'auto') spacer.style.gridColumn = cs.gridColumn;
+    if(cs.gridRow && cs.gridRow !== 'auto') spacer.style.gridRow = cs.gridRow;
+    if(cs.alignSelf && cs.alignSelf !== 'auto') spacer.style.alignSelf = cs.alignSelf;
+    spacer.style.visibility = 'hidden';
+    spacer.style.pointerEvents = 'none';
+    el.parentNode.insertBefore(spacer, el);
+  }
+
   el.style.boxSizing = 'border-box';
   el.style.position = 'absolute';
   el.style.margin = '0';
-
-  // reparenting은 하지 않음 — 부모 flex/grid 레이아웃이 재배치되며
-  // 형제 요소가 빈 공간을 채워 시각적으로 깨지는 것을 방지.
-  // 좌표는 offsetParent(가장 가까운 positioned 조상) 기준.
-  const target = el.offsetParent || slide;
-  const targetRect = target.getBoundingClientRect();
-  el.style.left = (elRect.left - targetRect.left) + 'px';
-  el.style.top  = (elRect.top  - targetRect.top)  + 'px';
+  el.style.left = newLeft + 'px';
+  el.style.top  = newTop + 'px';
   el.style.width = w + 'px';
   el.style.height = h + 'px';
 }
@@ -472,13 +489,28 @@ function makeAbsolute(el){
 function startDragMove(e){
   const el = state.selected; if(!el) return;
   if(el.classList && el.classList.contains('slide')) return; // don't drag the whole slide
-  if(el.style.position !== 'absolute') makeAbsolute(el);
+  // 임계값(4px) 넘게 움직였을 때만 makeAbsolute 호출 — 단순 클릭에서 절대위치 전환되는 것 방지
+  const DRAG_THRESHOLD = 4;
   const startX = e.clientX, startY = e.clientY;
-  const startL = parseFloat(el.style.left)||0;
-  const startT = parseFloat(el.style.top)||0;
+  let startL = 0, startT = 0, dragOriginX = 0, dragOriginY = 0, dragging = false;
   const fdoc = $('frame').contentDocument;
+  const beginDrag = (ev) => {
+    if(el.style.position !== 'absolute') makeAbsolute(el);
+    startL = parseFloat(el.style.left)||0;
+    startT = parseFloat(el.style.top)||0;
+    // 임계값을 넘은 시점의 마우스 좌표를 새 기준으로 — threshold 만큼의 점프 방지
+    dragOriginX = ev.clientX;
+    dragOriginY = ev.clientY;
+    dragging = true;
+  };
   const onMove = ev => {
-    const dx = ev.clientX - startX, dy = ev.clientY - startY;
+    if(!dragging){
+      const dx0 = ev.clientX - startX, dy0 = ev.clientY - startY;
+      if(Math.abs(dx0) < DRAG_THRESHOLD && Math.abs(dy0) < DRAG_THRESHOLD) return;
+      beginDrag(ev);
+      return;
+    }
+    const dx = ev.clientX - dragOriginX, dy = ev.clientY - dragOriginY;
     el.style.left = (startL + dx) + 'px';
     el.style.top  = (startT + dy) + 'px';
     renderHandles();
@@ -489,7 +521,7 @@ function startDragMove(e){
     fdoc.removeEventListener('mouseup', onUp, true);
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('mouseup', onUp, true);
-    snapshot();
+    if(dragging) snapshot();
   };
   fdoc.addEventListener('mousemove', onMove, true);
   fdoc.addEventListener('mouseup', onUp, true);
