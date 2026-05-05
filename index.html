@@ -333,6 +333,32 @@ function getSlideRoot(el){
   return null;
 }
 
+// 슬라이드의 대표 제목을 추측한다.
+// 1) 흔한 제목 클래스/태그 우선 → 2) 슬라이드 내 가장 큰 font-size 텍스트 → 3) 최초 비어있지 않은 텍스트
+function extractSlideTitle(slide){
+  const sel = '.sh, .ch, .kicker, .title, .slide-title, .heading, h1, h2, h3';
+  const headed = slide.querySelector(sel);
+  if(headed && headed.textContent.trim()) return headed.textContent;
+  // font-size 기반 추정
+  let best = null, bestSize = 0;
+  slide.querySelectorAll('*').forEach(el => {
+    if(!el.children.length || [...el.children].every(c => c.children.length===0)){
+      const txt = el.textContent.trim();
+      if(!txt || txt.length>80) return;
+      const m = (el.getAttribute('style')||'').match(/font-size\s*:\s*(\d+(?:\.\d+)?)px/i);
+      const size = m ? parseFloat(m[1]) : 0;
+      if(size > bestSize){ bestSize = size; best = txt; }
+    }
+  });
+  if(best && bestSize >= 18) return best;
+  // 마지막 fallback: 첫 짧은 텍스트
+  for(const el of slide.querySelectorAll('*')){
+    const txt = el.textContent.trim();
+    if(txt && txt.length<=60 && el.children.length===0) return txt;
+  }
+  return '';
+}
+
 // ============ Slide list ============
 function renderSlideList(){
   const list = $('slide-list');
@@ -340,7 +366,7 @@ function renderSlideList(){
   state.slideEls.forEach((s, i) => {
     const t = document.createElement('div');
     t.className = 'thumb' + (i===state.curSlide?' active':'');
-    const title = (s.querySelector('.sh, .ch, h1, h2')?.textContent || s.id || ('Slide '+(i+1))).trim().slice(0,30);
+    const title = (extractSlideTitle(s) || s.id || ('Slide '+(i+1))).trim().slice(0,30);
     t.innerHTML = `<span class="thumb-num">${String(i+1).padStart(2,'0')}</span><span class="thumb-title">${escapeHTML(title)}</span><span class="thumb-del" title="삭제">✕</span>`;
     t.querySelector('.thumb-title').onclick = () => showSlide(i);
     t.querySelector('.thumb-num').onclick = () => showSlide(i);
