@@ -46,6 +46,7 @@ button{font-family:inherit;font-size:12px;}
 #frame{width:1280px;height:800px;border:none;background:#000;display:block;box-shadow:0 0 80px rgba(0,0,0,0.6);}
 #overlay{position:absolute;top:0;left:0;width:1280px;height:800px;pointer-events:none;}
 .sel-box{position:absolute;border:2px solid #00d4a0;pointer-events:none;}
+.sel-box.sel-box-extra{border:2px solid #ffaa00;}
 .handle{position:absolute;width:10px;height:10px;background:#fff;border:2px solid #00d4a0;border-radius:2px;pointer-events:auto;cursor:pointer;z-index:10;}
 .handle.h-nw{cursor:nwse-resize;} .handle.h-ne{cursor:nesw-resize;}
 .handle.h-sw{cursor:nesw-resize;} .handle.h-se{cursor:nwse-resize;}
@@ -104,7 +105,7 @@ button{font-family:inherit;font-size:12px;}
     <span class="tb-sep"></span>
     <a class="tb-btn" id="btn-prompt" href="ppt_prompt_template.md" download title="새 PPT 생성용 프롬프트 템플릿 다운로드 (.md)">📄 프롬프트 템플릿</a>
     <span style="flex:1;"></span>
-    <span class="tb-label" id="hint">클릭 선택 · 방향키 이동(Shift=10px) · Alt+방향키 크기 변경 · DEL 삭제 · Ctrl+D 복제 · Ctrl+C/V 복사·붙여넣기 · ESC 해제</span>
+    <span class="tb-label" id="hint">클릭 선택 · Shift+클릭 다중 선택 · 방향키 이동(Shift=10px) · Alt+방향키 크기 변경 · DEL 삭제 · Ctrl+D 복제 · Ctrl+C/V 복사·붙여넣기 · ESC 해제</span>
   </div>
   <div id="left">
     <div class="sp-head">SLIDES</div>
@@ -130,7 +131,8 @@ const state = {
   doc: null,           // parsed Document of the loaded HTML
   slideEls: [],        // <div class="slide"> elements in order
   curSlide: 0,
-  selected: null,      // currently selected element inside iframe
+  selected: null,      // currently selected (primary) element inside iframe
+  selectedExtras: [],  // additional selected elements (Shift/Ctrl+클릭으로 추가됨)
   history: [],
   historyIdx: -1,
   fileName: 'edited.html',
@@ -286,6 +288,7 @@ function loadHTML(html, resetHistory){
 
     state.curSlide = 0;
     state.selected = null;
+    state.selectedExtras = [];
     if(resetHistory){ state.history=[]; state.historyIdx=-1; snapshot(); state.savedHistoryIdx=state.historyIdx; }
     renderFrame();
     renderSlideList();
@@ -316,7 +319,8 @@ function buildFrameHTML(activeIdx){
     #scale-wrap{transform:none!important;margin:0!important;}
     #ctrl,#kbh{display:none!important;}
     .slide.ai,.slide.ao,.slide.air,.slide.aor{animation:none!important;}
-    [data-edit-hover]:not([data-edit-selected]){outline:1px dashed #00d4a0;outline-offset:-1px;}
+    [data-edit-hover]:not([data-edit-selected]):not([data-edit-multi]){outline:1px dashed #00d4a0;outline-offset:-1px;}
+    [data-edit-multi]{outline:2px solid #ffaa00;outline-offset:-2px;}
   `;
   clone.head.appendChild(style);
   return '<!DOCTYPE html>\n' + clone.documentElement.outerHTML;
@@ -358,8 +362,9 @@ function wireIframe(){
     const el = e.target;
     const root = getSlideRoot(el);
     if(!root) return;
-    if(el === root) { selectElement(root); return; }
-    selectElement(el);
+    const target = (el === root) ? root : el;
+    if(e.shiftKey || e.ctrlKey || e.metaKey){ toggleSelection(target); return; }
+    selectElement(target);
   }, true);
   fdoc.body.addEventListener('dblclick', e => {
     const el = e.target;
@@ -371,7 +376,11 @@ function wireIframe(){
   // start drag on selected element
   fdoc.body.addEventListener('mousedown', e => {
     if(!state.selected) return;
-    if(e.target !== state.selected && !state.selected.contains(e.target)) return;
+    // shift/ctrl 클릭은 선택 토글이므로 드래그 시작 안 함
+    if(e.shiftKey || e.ctrlKey || e.metaKey) return;
+    const all = getAllSelected();
+    const insideSel = all.some(s => e.target === s || s.contains(e.target));
+    if(!insideSel) return;
     // don't start drag on a content-editable
     if(e.target.isContentEditable) return;
     e.preventDefault();
@@ -496,6 +505,7 @@ function showSlide(i){
   syncIframeToDoc();
   state.curSlide = i;
   state.selected = null;
+  state.selectedExtras = [];
   renderFrame();
   renderSlideList();
   renderProps();
@@ -522,8 +532,10 @@ function syncIframeToDoc(){
   const cleanClone = iSlide.cloneNode(true);
   cleanClone.querySelectorAll('[data-edit-hover]').forEach(n => n.removeAttribute('data-edit-hover'));
   cleanClone.querySelectorAll('[data-edit-selected]').forEach(n => n.removeAttribute('data-edit-selected'));
+  cleanClone.querySelectorAll('[data-edit-multi]').forEach(n => n.removeAttribute('data-edit-multi'));
   cleanClone.removeAttribute('data-edit-hover');
   cleanClone.removeAttribute('data-edit-selected');
+  cleanClone.removeAttribute('data-edit-multi');
   cleanClone.classList.remove('active','ai','ao','air','aor');
   cleanClone.style.display = '';
   // Replace the slide in state.doc with imported clone (cross-doc safe)
@@ -577,14 +589,54 @@ function duplicateSlide(){
 }
 
 // ============ Selection ============
+function getAllSelected(){
+  const arr = [];
+  if(state.selected) arr.push(state.selected);
+  for(const e of state.selectedExtras){ if(e && e !== state.selected) arr.push(e); }
+  return arr;
+}
 function selectElement(el){
   // clear previous mark
   const fdoc = $('frame').contentDocument;
-  if(fdoc) fdoc.querySelectorAll('[data-edit-selected]').forEach(n => n.removeAttribute('data-edit-selected'));
+  if(fdoc) fdoc.querySelectorAll('[data-edit-selected],[data-edit-multi]').forEach(n => {
+    n.removeAttribute('data-edit-selected'); n.removeAttribute('data-edit-multi');
+  });
   state.selected = el;
+  state.selectedExtras = [];
   if(el) el.setAttribute('data-edit-selected','');
   renderProps();
   renderHandles();
+}
+function toggleSelection(el){
+  if(!el) return;
+  // 슬라이드 루트는 멀티 선택 대상에서 제외
+  if(el.classList && el.classList.contains('slide')) return;
+  if(!state.selected){ selectElement(el); return; }
+  // 같은 슬라이드 안의 요소만 묶음 선택
+  if(getSlideRoot(state.selected) !== getSlideRoot(el)) return;
+  if(el === state.selected){
+    // primary 해제 → 첫 extra를 primary로 승격
+    el.removeAttribute('data-edit-selected');
+    if(state.selectedExtras.length){
+      const next = state.selectedExtras.shift();
+      state.selected = next;
+      next.removeAttribute('data-edit-multi');
+      next.setAttribute('data-edit-selected','');
+    } else {
+      state.selected = null;
+    }
+    renderProps(); renderHandles();
+    return;
+  }
+  const idx = state.selectedExtras.indexOf(el);
+  if(idx >= 0){
+    state.selectedExtras.splice(idx,1);
+    el.removeAttribute('data-edit-multi');
+  } else {
+    state.selectedExtras.push(el);
+    el.setAttribute('data-edit-multi','');
+  }
+  renderProps(); renderHandles();
 }
 
 function clearSelection(){ selectElement(null); }
@@ -649,18 +701,20 @@ function makeAbsolute(el){
 }
 
 function startDragMove(e){
-  const el = state.selected; if(!el) return;
-  if(el.classList && el.classList.contains('slide')) return; // don't drag the whole slide
+  const primary = state.selected; if(!primary) return;
+  if(primary.classList && primary.classList.contains('slide')) return; // don't drag the whole slide
+  const targets = getAllSelected().filter(t => !(t.classList && t.classList.contains('slide')));
   // 임계값(4px) 넘게 움직였을 때만 makeAbsolute 호출 — 단순 클릭에서 절대위치 전환되는 것 방지
   const DRAG_THRESHOLD = 4;
   const startX = e.clientX, startY = e.clientY;
-  let startL = 0, startT = 0, dragOriginX = 0, dragOriginY = 0, dragging = false;
+  const starts = []; // [{el, l, t}]
+  let dragOriginX = 0, dragOriginY = 0, dragging = false;
   const fdoc = $('frame').contentDocument;
   const beginDrag = (ev) => {
-    if(el.style.position !== 'absolute') makeAbsolute(el);
-    startL = parseFloat(el.style.left)||0;
-    startT = parseFloat(el.style.top)||0;
-    // 임계값을 넘은 시점의 마우스 좌표를 새 기준으로 — threshold 만큼의 점프 방지
+    targets.forEach(t => {
+      if(t.style.position !== 'absolute') makeAbsolute(t);
+      starts.push({el:t, l: parseFloat(t.style.left)||0, t: parseFloat(t.style.top)||0});
+    });
     dragOriginX = ev.clientX;
     dragOriginY = ev.clientY;
     dragging = true;
@@ -672,13 +726,13 @@ function startDragMove(e){
       beginDrag(ev);
       return;
     }
-    // 캔버스가 transform: scale(s)로 축소돼 있을 수 있으므로 마우스 delta(parent 화면 px)를
-    // 1/s로 나눠 iframe 좌표계의 px로 변환한다 — resize와 동일한 보정.
     const scale = getScale() || 1;
     const dx = (ev.clientX - dragOriginX) / scale;
     const dy = (ev.clientY - dragOriginY) / scale;
-    el.style.left = (startL + dx) + 'px';
-    el.style.top  = (startT + dy) + 'px';
+    starts.forEach(s => {
+      s.el.style.left = (s.l + dx) + 'px';
+      s.el.style.top  = (s.t + dy) + 'px';
+    });
     renderHandles();
     syncPropFields();
   };
@@ -735,6 +789,16 @@ function renderHandles(){
   const el = state.selected; if(!el) return;
   const slide = getSlideRoot(el); if(!slide) return;
   const fdoc = $('frame').contentDocument; if(!fdoc) return;
+  // extras: 보조 선택 박스만 그림 (핸들 없음)
+  for(const ex of state.selectedExtras){
+    if(!ex || ex === el) continue;
+    const r = ex.getBoundingClientRect();
+    const b = document.createElement('div');
+    b.className = 'sel-box sel-box-extra';
+    b.style.left = r.left+'px'; b.style.top = r.top+'px';
+    b.style.width = r.width+'px'; b.style.height = r.height+'px';
+    ov.appendChild(b);
+  }
   const elRect = el.getBoundingClientRect();
   // overlay와 iframe은 모두 canvas-wrap (0,0)에 정렬되고 같은 1280x800 크기이므로
   // iframe 내부 viewport 좌표(getBoundingClientRect)를 그대로 overlay 좌표로 쓰면 정확히 겹친다.
@@ -782,7 +846,12 @@ function renderProps(){
   const p = $('props');
   const el = state.selected;
   if(!el){
-    p.innerHTML = `<div id="empty-msg">선택된 요소가 없습니다.<br><br>가운데 슬라이드의 아무 요소나<br>클릭하여 편집을 시작하세요.</div>`;
+    p.innerHTML = `<div id="empty-msg">선택된 요소가 없습니다.<br><br>가운데 슬라이드의 아무 요소나<br>클릭하여 편집을 시작하세요.<br><br>Shift+클릭으로 여러 요소를 선택할 수 있습니다.</div>`;
+    return;
+  }
+  if(state.selectedExtras && state.selectedExtras.length > 0){
+    const n = state.selectedExtras.length + 1;
+    p.innerHTML = `<div id="empty-msg"><b>${n}개 요소 선택됨</b><br><br>드래그·방향키로 함께 이동<br>DEL로 함께 삭제<br><br>속성 편집은 단일 선택 시에만 가능합니다.<br>(Shift+클릭으로 추가/해제)</div>`;
     return;
   }
 
@@ -1096,10 +1165,11 @@ function startInlineEdit(el, clickEvent){
 
 // ============ Delete / Duplicate ============
 function deleteSelected(){
-  const el = state.selected; if(!el) return;
-  if(el.classList && el.classList.contains('slide')) return;
-  el.remove();
+  const all = getAllSelected().filter(e => !(e.classList && e.classList.contains('slide')));
+  if(!all.length) return;
+  all.forEach(e => e.remove());
   state.selected = null;
+  state.selectedExtras = [];
   snapshot();
   renderProps();
   renderHandles();
@@ -1178,10 +1248,11 @@ function handleKeydown(e){
   const el = state.selected;
   if(el && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
     if(el.classList && el.classList.contains('slide')) return;
-    ensureAbs(el);
     const step = e.shiftKey ? 10 : 1;
     const altHeld = e.altKey || (e.getModifierState && e.getModifierState('Alt')) || state.altDown;
     if(altHeld){
+      // 크기 변경은 단일(primary) 대상에만 적용
+      ensureAbs(el);
       let w = parseFloat(el.style.width)  || el.offsetWidth;
       let h = parseFloat(el.style.height) || el.offsetHeight;
       if(e.key==='ArrowLeft')  w = Math.max(1, w - step);
@@ -1191,10 +1262,15 @@ function handleKeydown(e){
       el.style.width  = w + 'px';
       el.style.height = h + 'px';
     } else {
-      if(e.key==='ArrowLeft')  el.style.left = (parseFloat(el.style.left)-step)+'px';
-      if(e.key==='ArrowRight') el.style.left = (parseFloat(el.style.left)+step)+'px';
-      if(e.key==='ArrowUp')    el.style.top  = (parseFloat(el.style.top)-step)+'px';
-      if(e.key==='ArrowDown')  el.style.top  = (parseFloat(el.style.top)+step)+'px';
+      // 이동은 멀티 선택 전체에 적용
+      const targets = getAllSelected().filter(t => !(t.classList && t.classList.contains('slide')));
+      targets.forEach(t => {
+        ensureAbs(t);
+        if(e.key==='ArrowLeft')  t.style.left = (parseFloat(t.style.left)-step)+'px';
+        if(e.key==='ArrowRight') t.style.left = (parseFloat(t.style.left)+step)+'px';
+        if(e.key==='ArrowUp')    t.style.top  = (parseFloat(t.style.top)-step)+'px';
+        if(e.key==='ArrowDown')  t.style.top  = (parseFloat(t.style.top)+step)+'px';
+      });
     }
     renderHandles(); syncPropFields();
     e.preventDefault();
