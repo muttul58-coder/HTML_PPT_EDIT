@@ -9,8 +9,10 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI','Malgun 
 button{font-family:inherit;font-size:12px;}
 
 /* 레이아웃 */
-#app{display:grid;grid-template-rows:48px 1fr;grid-template-columns:220px 1fr 280px;height:100vh;}
+#app{display:grid;grid-template-rows:48px 1fr 26px;grid-template-columns:220px 1fr 280px;height:100vh;}
 #topbar{grid-column:1/4;background:#0f1116;border-bottom:1px solid #262932;display:flex;align-items:center;padding:0 14px;gap:8px;}
+#hintbar{grid-column:1/4;background:#0f1116;border-top:1px solid #262932;display:flex;align-items:center;padding:0 14px;color:#8a8f9a;font-size:11px;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#hintbar b{color:#00d4a0;font-weight:600;margin-right:2px;}
 #left{background:#13161d;border-right:1px solid #262932;overflow-y:auto;}
 #center{background:#06080c;overflow:auto;position:relative;display:flex;align-items:center;justify-content:center;}
 #right{background:#13161d;border-left:1px solid #262932;overflow-y:auto;overflow-x:hidden;padding:12px;min-width:0;}
@@ -84,7 +86,7 @@ button{font-family:inherit;font-size:12px;}
 #crumbs span{cursor:pointer;}
 #crumbs span:hover{color:#00d4a0;}
 
-#status{position:fixed;bottom:10px;left:230px;background:rgba(0,0,0,0.8);padding:6px 12px;border-radius:4px;font-size:11px;color:#00d4a0;display:none;}
+#status{position:fixed;bottom:36px;left:230px;background:rgba(0,0,0,0.8);padding:6px 12px;border-radius:4px;font-size:11px;color:#00d4a0;display:none;}
 </style>
 </head>
 <body>
@@ -120,6 +122,7 @@ button{font-family:inherit;font-size:12px;}
   <div id="right">
     <div id="props"><div id="empty-msg">선택된 요소가 없습니다.<br><br>가운데 슬라이드의 아무 요소나<br>클릭하여 편집을 시작하세요.</div></div>
   </div>
+  <div id="hintbar"><b>단축키</b> · 클릭 선택 · 방향키 이동(Shift=10px) · Alt+방향키 크기 변경 · DEL 삭제 · Ctrl+D 복제 · Ctrl+C/V 복사·붙여넣기 · ESC 해제</div>
 </div>
 <div id="status"></div>
 
