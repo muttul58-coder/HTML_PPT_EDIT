@@ -31,6 +31,11 @@ button{font-family:inherit;font-size:12px;}
 .thumb{margin:6px 10px;background:#1c1f28;border:1px solid #262932;border-radius:6px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;}
 .thumb:hover{border-color:#00d4a0;}
 .thumb.active{background:#003a2c;border-color:#00d4a0;}
+.thumb.dragging{opacity:.4;}
+.thumb.drop-before{border-top:2px solid #00d4a0;}
+.thumb.drop-after{border-bottom:2px solid #00d4a0;}
+.thumb-handle{font-size:14px;color:#5a6070;cursor:grab;user-select:none;}
+.thumb-handle:active{cursor:grabbing;}
 .thumb-num{font-family:monospace;font-size:11px;color:#8a8f9a;width:20px;}
 .thumb-title{font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .thumb-del{opacity:.4;cursor:pointer;font-size:12px;}
@@ -86,7 +91,7 @@ button{font-family:inherit;font-size:12px;}
   <div id="topbar">
     <span id="title">HTML PPT EDITOR</span>
     <button class="tb-btn" id="btn-open">파일 열기</button>
-    <span id="current-file" style="color:#8a8f9a; font-size:11px; margin-left:8px;"></span>
+    <span id="current-file" title="클릭해서 파일명 편집" style="color:#8a8f9a; font-size:11px; margin-left:8px; cursor:pointer; padding:2px 6px; border-radius:3px;"></span>
     <input type="file" id="file-input" accept=".html,.htm" style="display:none;">
     <span class="tb-sep"></span>
     <button class="tb-btn primary" id="btn-save">HTML 내보내기</button>
@@ -99,7 +104,7 @@ button{font-family:inherit;font-size:12px;}
     <span class="tb-sep"></span>
     <a class="tb-btn" id="btn-prompt" href="ppt_prompt_template.md" download title="새 PPT 생성용 프롬프트 템플릿 다운로드 (.md)">📄 프롬프트 템플릿</a>
     <span style="flex:1;"></span>
-    <span class="tb-label" id="hint">클릭 선택 · 방향키 이동(Shift=10px) · Alt+방향키 크기 변경 · DEL 삭제 · Ctrl+D 복제 · ESC 해제</span>
+    <span class="tb-label" id="hint">클릭 선택 · 방향키 이동(Shift=10px) · Alt+방향키 크기 변경 · DEL 삭제 · Ctrl+D 복제 · Ctrl+C/V 복사·붙여넣기 · ESC 해제</span>
   </div>
   <div id="left">
     <div class="sp-head">SLIDES</div>
@@ -133,7 +138,34 @@ const state = {
   iframeReady: false,  // true once iframe srcdoc reflects current state.doc
   iframeDoc: null,     // which state.doc instance the iframe currently reflects
   iframeIdx: -1,       // which slide index the iframe currently shows
+  savedHistoryIdx: 0,  // history index at last export — anything after = unsaved
 };
+function isDirty(){ return state.history.length > 0 && state.historyIdx > state.savedHistoryIdx; }
+
+const AUTOSAVE_KEY = 'html_ppt_editor_autosave_v1';
+function autosave(){
+  clearTimeout(autosave._t);
+  autosave._t = setTimeout(() => {
+    try {
+      if(!state.doc) return;
+      const html = '<!DOCTYPE html>\n' + state.doc.documentElement.outerHTML;
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
+        html, fileName: state.fileName, slide: state.curSlide, time: Date.now()
+      }));
+    } catch(e){ console.warn('autosave failed:', e.message); }
+  }, 800);
+}
+function clearAutosave(){
+  try { localStorage.removeItem(AUTOSAVE_KEY); } catch(e){}
+}
+function readAutosave(){
+  try { return JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null'); } catch(e){ return null; }
+}
+function updateHistoryButtons(){
+  const u = $('btn-undo'), r = $('btn-redo');
+  if(u) u.disabled = state.historyIdx <= 0;
+  if(r) r.disabled = state.historyIdx >= state.history.length-1;
+}
 
 // ============ Utilities ============
 const $ = id => document.getElementById(id);
@@ -152,18 +184,22 @@ function snapshot(){
   // truncate forward history
   state.history = state.history.slice(0, state.historyIdx+1);
   state.history.push({html, slide: state.curSlide});
-  if(state.history.length > 50) state.history.shift();
+  if(state.history.length > 50){ state.history.shift(); state.savedHistoryIdx--; }
   state.historyIdx = state.history.length - 1;
+  updateHistoryButtons();
+  if(isDirty()) autosave();
 }
 function undo(){
   if(state.historyIdx <= 0) return;
   state.historyIdx--;
   restoreSnapshot(state.history[state.historyIdx]);
+  updateHistoryButtons();
 }
 function redo(){
   if(state.historyIdx >= state.history.length-1) return;
   state.historyIdx++;
   restoreSnapshot(state.history[state.historyIdx]);
+  updateHistoryButtons();
 }
 function restoreSnapshot(snap){
   loadHTML(snap.html, false);
@@ -173,14 +209,37 @@ function restoreSnapshot(snap){
 // ============ Loading ============
 async function loadDefault(force){
   if(!force && state.loadedByUser) return;
+  // 자동 저장본 복구 제안
+  const auto = readAutosave();
+  if(!force && auto && auto.html){
+    const mins = Math.round((Date.now()-auto.time)/60000);
+    const when = mins < 1 ? '방금 전' : (mins < 60 ? `${mins}분 전` : `${Math.round(mins/60)}시간 전`);
+    if(confirm(`자동 저장된 편집 내용이 있습니다 (${when}, ${auto.fileName||'unknown'}).\n복구하시겠습니까?\n\n[취소]를 누르면 원본 파일을 새로 로드합니다.`)){
+      state.fileName = auto.fileName || 'recovered.html';
+      loadHTML(auto.html, true);
+      setTimeout(()=>{ if(auto.slide!=null) showSlide(auto.slide); }, 100);
+      showStatus('자동 저장본 복구됨', 2500);
+      return;
+    } else {
+      clearAutosave();
+    }
+  }
   try {
-    const res = await fetch('data/rpc_ppt.html');
-    if(!res.ok) throw new Error('fetch failed');
+    // data/ 디렉토리에서 첫 .html 파일을 자동 선택 (editor_manual.html은 제외)
+    const idx = await fetch('data/');
+    if(!idx.ok) throw new Error('data/ index fetch failed');
+    const idxHTML = await idx.text();
+    const links = Array.from(idxHTML.matchAll(/href="([^"]+\.html?)"/gi)).map(m => m[1]);
+    const candidate = links.find(n => !/editor_manual/i.test(n));
+    if(!candidate) throw new Error('no html in data/');
+    const res = await fetch('data/' + candidate);
+    if(!res.ok) throw new Error('fetch failed: ' + candidate);
     const html = await res.text();
     state.loadedByUser = false;
-    state.fileName = 'rpc_ppt_edited.html';
+    state.fileName = candidate.replace(/\.html?$/i,'').replace(/(_edited)+$/,'') + '_edited.html';
     loadHTML(html, true);
   } catch(e){
+    console.warn('loadDefault fallback:', e.message);
     // Fallback: create visible default slide
     const defaultHTML = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>New PPT</title>
@@ -227,7 +286,7 @@ function loadHTML(html, resetHistory){
 
     state.curSlide = 0;
     state.selected = null;
-    if(resetHistory){ state.history=[]; state.historyIdx=-1; snapshot(); }
+    if(resetHistory){ state.history=[]; state.historyIdx=-1; snapshot(); state.savedHistoryIdx=state.historyIdx; }
     renderFrame();
     renderSlideList();
     renderProps();
@@ -366,13 +425,69 @@ function renderSlideList(){
   state.slideEls.forEach((s, i) => {
     const t = document.createElement('div');
     t.className = 'thumb' + (i===state.curSlide?' active':'');
+    t.draggable = true;
+    t.dataset.idx = i;
     const title = (extractSlideTitle(s) || s.id || ('Slide '+(i+1))).trim().slice(0,30);
-    t.innerHTML = `<span class="thumb-num">${String(i+1).padStart(2,'0')}</span><span class="thumb-title">${escapeHTML(title)}</span><span class="thumb-del" title="삭제">✕</span>`;
+    t.innerHTML = `<span class="thumb-handle" title="드래그하여 순서 변경">⋮⋮</span><span class="thumb-num">${String(i+1).padStart(2,'0')}</span><span class="thumb-title">${escapeHTML(title)}</span><span class="thumb-del" title="삭제">✕</span>`;
     t.querySelector('.thumb-title').onclick = () => showSlide(i);
     t.querySelector('.thumb-num').onclick = () => showSlide(i);
     t.querySelector('.thumb-del').onclick = (e) => { e.stopPropagation(); deleteSlide(i); };
+    // drag-and-drop reorder
+    t.addEventListener('dragstart', e => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i));
+      t.classList.add('dragging');
+    });
+    t.addEventListener('dragend', () => {
+      t.classList.remove('dragging');
+      list.querySelectorAll('.thumb').forEach(n => n.classList.remove('drop-before','drop-after'));
+    });
+    t.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const r = t.getBoundingClientRect();
+      const before = (e.clientY - r.top) < r.height/2;
+      list.querySelectorAll('.thumb').forEach(n => n.classList.remove('drop-before','drop-after'));
+      t.classList.add(before?'drop-before':'drop-after');
+    });
+    t.addEventListener('drop', e => {
+      e.preventDefault();
+      const from = parseInt(e.dataTransfer.getData('text/plain'));
+      if(isNaN(from) || from===i) return;
+      const r = t.getBoundingClientRect();
+      const before = (e.clientY - r.top) < r.height/2;
+      let to = before ? i : i+1;
+      reorderSlide(from, to);
+    });
     list.appendChild(t);
   });
+}
+
+function reorderSlide(from, to){
+  if(from<0 || from>=state.slideEls.length) return;
+  if(to<0 || to>state.slideEls.length) return;
+  if(to===from || to===from+1) return; // no-op
+  syncIframeToDoc();
+  const moving = state.slideEls[from];
+  // 삽입 기준점: 드래그한 슬라이드를 제거한 후의 새 위치
+  const refIdx = (to > from) ? to : to;
+  const parent = moving.parentNode;
+  // 안전한 배열-기반 재정렬
+  const arr = state.slideEls.slice();
+  const [m] = arr.splice(from, 1);
+  const insertIdx = (to > from) ? (to - 1) : to;
+  arr.splice(insertIdx, 0, m);
+  // DOM에 다시 붙이기 — 같은 부모 안에서 순서 변경
+  arr.forEach(s => parent.appendChild(s));
+  state.slideEls = Array.from(state.doc.querySelectorAll('.slide'));
+  // 현재 보던 슬라이드 인덱스를 추적
+  const newCur = state.slideEls.indexOf(state.slideEls.find(s => s === moving) || state.slideEls[insertIdx]);
+  if(state.curSlide === from) state.curSlide = insertIdx;
+  else if(from < state.curSlide && insertIdx >= state.curSlide) state.curSlide--;
+  else if(from > state.curSlide && insertIdx <= state.curSlide) state.curSlide++;
+  snapshot();
+  renderFrame();
+  renderSlideList();
 }
 
 function showSlide(i){
@@ -421,6 +536,8 @@ function syncIframeToDoc(){
 function deleteSlide(i){
   if(state.slideEls.length <= 1){ alert('최소 1장 이상 유지되어야 합니다.'); return; }
   if(!confirm(`슬라이드 ${i+1}을(를) 삭제하시겠습니까?`)) return;
+  // 구조 변경 전에 현재 iframe 편집을 state.doc로 반영 (slideEls 길이가 바뀌면 sync가 스킵됨)
+  syncIframeToDoc();
   state.slideEls[i].remove();
   state.slideEls = Array.from(state.doc.querySelectorAll('.slide'));
   if(state.curSlide >= state.slideEls.length) state.curSlide = state.slideEls.length-1;
@@ -430,6 +547,7 @@ function deleteSlide(i){
 }
 
 function addSlide(){
+  syncIframeToDoc();
   const idx = state.slideEls.length;
   const s = state.doc.createElement('div');
   s.className = 'slide';
@@ -446,6 +564,7 @@ function addSlide(){
 }
 
 function duplicateSlide(){
+  syncIframeToDoc();
   const cur = state.slideEls[state.curSlide];
   const cp = cur.cloneNode(true);
   cp.id = 's' + Date.now();
@@ -553,7 +672,11 @@ function startDragMove(e){
       beginDrag(ev);
       return;
     }
-    const dx = ev.clientX - dragOriginX, dy = ev.clientY - dragOriginY;
+    // 캔버스가 transform: scale(s)로 축소돼 있을 수 있으므로 마우스 delta(parent 화면 px)를
+    // 1/s로 나눠 iframe 좌표계의 px로 변환한다 — resize와 동일한 보정.
+    const scale = getScale() || 1;
+    const dx = (ev.clientX - dragOriginX) / scale;
+    const dy = (ev.clientY - dragOriginY) / scale;
     el.style.left = (startL + dx) + 'px';
     el.style.top  = (startT + dy) + 'px';
     renderHandles();
@@ -674,7 +797,8 @@ function renderProps(){
 
   const fontSize = parseFloat(cs.fontSize)||14;
   const color = rgbToHex(cs.color);
-  const bg = rgbToHex(cs.backgroundColor);
+  const bgIsTransparent = isTransparentColor(cs.backgroundColor);
+  const bg = bgIsTransparent ? '#000000' : rgbToHex(cs.backgroundColor);
   const fontWeight = cs.fontWeight;
   const textAlign = cs.textAlign;
   const lineHeightRaw = cs.lineHeight;
@@ -726,7 +850,12 @@ function renderProps(){
     <div class="ph">스타일</div>
     <div class="row">
       <div class="field"><label>글자색</label><input id="f-color" type="color" value="${color}"></div>
-      <div class="field"><label>배경색</label><input id="f-bg" type="color" value="${bg}"></div>
+      <div class="field"><label>배경색 ${bgIsTransparent?'<span style="color:#f5a623">· 현재 투명</span>':''}</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input id="f-bg" type="color" value="${bg}" style="flex:1;${bgIsTransparent?'background-image:linear-gradient(45deg,#888 25%,transparent 25%,transparent 75%,#888 75%),linear-gradient(45deg,#888 25%,transparent 25%,transparent 75%,#888 75%);background-size:8px 8px;background-position:0 0,4px 4px;':''}">
+          <button class="mini-btn" id="b-bg-clear" title="배경을 투명으로">투명</button>
+        </div>
+      </div>
     </div>
     <div class="row3">
       <div class="field"><label>크기(px)</label><input id="f-fs" type="number" value="${fontSize.toFixed(0)}"></div>
@@ -791,6 +920,12 @@ function renderProps(){
   bind('f-h', e => { ensureAbs(el); el.style.height = e.target.value+'px'; renderHandles(); });
   bind('f-color', e => { el.style.color = e.target.value; });
   bind('f-bg', e => { el.style.background = e.target.value; });
+  const bgClearBtn = $('b-bg-clear');
+  if(bgClearBtn) bgClearBtn.onclick = () => {
+    el.style.background = 'transparent';
+    snapshot();
+    renderProps();
+  };
   bind('f-fs', e => { el.style.fontSize = e.target.value+'px'; renderHandles(); });
   bind('f-fw', e => { el.style.fontWeight = e.target.value; });
   bind('f-ta', e => { el.style.textAlign = e.target.value; });
@@ -885,8 +1020,16 @@ function buildCrumbs(el){
 
 function rgbToHex(rgb){
   if(!rgb) return '#000000';
-  const m = rgb.match(/\d+/g); if(!m || m.length<3) return '#000000';
+  const m = rgb.match(/[\d.]+/g); if(!m || m.length<3) return '#000000';
   return '#' + m.slice(0,3).map(x=>parseInt(x).toString(16).padStart(2,'0')).join('');
+}
+function isTransparentColor(rgb){
+  if(!rgb || rgb==='transparent') return true;
+  const m = rgb.match(/rgba?\(([^)]+)\)/i);
+  if(!m) return false;
+  const parts = m[1].split(',').map(s=>parseFloat(s.trim()));
+  if(parts.length>=4 && parts[3]===0) return true;
+  return false;
 }
 function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -974,6 +1117,40 @@ function duplicateSelected(){
   snapshot();
 }
 
+// 요소 클립보드 (메모리)
+function copySelected(){
+  const el = state.selected; if(!el) return;
+  if(el.classList && el.classList.contains('slide')) return;
+  state.clipboardHTML = el.outerHTML;
+  showStatus('복사됨');
+}
+function pasteClipboard(){
+  if(!state.clipboardHTML) return;
+  const fdoc = $('frame').contentDocument; if(!fdoc) return;
+  // 붙여넣기 위치: 선택된 요소의 부모 또는 현재 슬라이드 루트
+  let host = state.selected && state.selected.parentNode;
+  if(!host || (state.selected && state.selected.classList && state.selected.classList.contains('slide'))) host = state.selected;
+  if(!host) host = fdoc.querySelectorAll('.slide')[state.curSlide];
+  if(!host) return;
+  // outerHTML을 파싱
+  const tpl = fdoc.createElement('template');
+  tpl.innerHTML = state.clipboardHTML;
+  const newEl = tpl.content.firstElementChild;
+  if(!newEl) return;
+  // 절대 위치라면 +20px 오프셋
+  if(newEl.style && newEl.style.position === 'absolute'){
+    newEl.style.left = ((parseFloat(newEl.style.left)||0)+20)+'px';
+    newEl.style.top  = ((parseFloat(newEl.style.top) ||0)+20)+'px';
+  }
+  // 편집자 마킹 속성 제거
+  newEl.removeAttribute('data-edit-hover');
+  newEl.removeAttribute('data-edit-selected');
+  host.appendChild(newEl);
+  selectElement(newEl);
+  snapshot();
+  showStatus('붙여넣기 완료');
+}
+
 // ============ Keyboard ============
 function handleKeydown(e){
   // ignore if typing in inputs
@@ -993,6 +1170,9 @@ function handleKeydown(e){
   if((e.ctrlKey||e.metaKey) && e.key==='z'){ undo(); e.preventDefault(); return; }
   if((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.shiftKey && e.key==='Z'))){ redo(); e.preventDefault(); return; }
   if((e.ctrlKey||e.metaKey) && e.key==='s'){ exportHTML(); e.preventDefault(); return; }
+  if((e.ctrlKey||e.metaKey) && e.key==='c'){ copySelected(); e.preventDefault(); return; }
+  if((e.ctrlKey||e.metaKey) && e.key==='v'){ pasteClipboard(); e.preventDefault(); return; }
+  if((e.ctrlKey||e.metaKey) && e.key==='x'){ copySelected(); deleteSelected(); e.preventDefault(); return; }
 
   // arrow nudging (이동) / Alt+arrow (크기 변경, top-left 고정)
   const el = state.selected;
@@ -1080,8 +1260,17 @@ function exportHTML(){
   a.href = url; a.download = state.fileName;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
+  state.savedHistoryIdx = state.historyIdx;
+  clearAutosave();
   showStatus('내보내기 완료: ' + state.fileName);
 }
+
+window.addEventListener('beforeunload', e => {
+  if(!isDirty()) return;
+  e.preventDefault();
+  e.returnValue = '';
+  return '';
+});
 
 // ============ Wire UI ============
 $('btn-open').onclick = () => $('file-input').click();
@@ -1092,8 +1281,23 @@ $('btn-redo').onclick = redo;
 $('btn-add-slide').onclick = addSlide;
 $('btn-dup-slide').onclick = duplicateSlide;
 
+// 파일명 클릭 → 편집
+$('current-file').onclick = () => {
+  const span = $('current-file');
+  const cur = state.fileName || 'edited.html';
+  const newName = prompt('파일명을 입력하세요 (.html 자동 추가):', cur);
+  if(newName == null) return;
+  let v = newName.trim();
+  if(!v) return;
+  if(!/\.html?$/i.test(v)) v += '.html';
+  state.fileName = v;
+  span.textContent = '현재: ' + v;
+  showStatus('파일명 변경: ' + v);
+};
+
 // Auto-load default on start
 window.addEventListener('load', loadDefault);
+updateHistoryButtons();
 </script>
 </body>
 </html>
