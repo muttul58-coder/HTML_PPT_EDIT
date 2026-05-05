@@ -1257,12 +1257,18 @@ function exportHTML(){
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = state.fileName;
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const stamp = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  const base = (state.fileName || 'edited.html').replace(/\.html?$/i,'').replace(/_\d{8}_\d{6}$/,'');
+  const ext = (state.fileName && /\.htm$/i.test(state.fileName)) ? '.htm' : '.html';
+  const downloadName = `${base}_${stamp}${ext}`;
+  a.href = url; a.download = downloadName;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
   state.savedHistoryIdx = state.historyIdx;
   clearAutosave();
-  showStatus('내보내기 완료: ' + state.fileName);
+  showStatus('내보내기 완료: ' + downloadName);
 }
 
 window.addEventListener('beforeunload', e => {
