@@ -865,23 +865,6 @@ function startDragMove(e){
         starts.forEach(s => { s.el.style.top  = (parseFloat(s.el.style.top) +snapDy)+'px'; });
       } else { guideY = null; }
     }
-    // 직계 부모를 자식들 union bbox에 맞게 매 tick 재크기 (다중 선택 시 부모 모두 처리)
-    const fitParents = new Set();
-    starts.forEach(s => {
-      const p = s.el.parentNode;
-      if(p && !(p.classList && p.classList.contains('slide'))) fitParents.add(p);
-    });
-    fitParents.forEach(p => {
-      const r = fitParentToChildren(p);
-      if(!r || (r.dL === 0 && r.dT === 0)) return;
-      // 부모가 이동한 만큼 starts의 기준값을 보정 → 다음 tick의 (s.l + dx)가 동일 슬라이드 좌표 유지
-      starts.forEach(s => {
-        if(s.el.parentNode === p){
-          s.l -= r.dL;
-          s.t -= r.dT;
-        }
-      });
-    });
     renderHandles();
     drawSnapGuides(guideX, guideY);
     syncPropFields();
