@@ -918,15 +918,6 @@ function startResize(dir, e){
     if(dir.includes('w')){ w = Math.max(20, startW-dx); l = startL+(startW-w); }
     if(dir.includes('n')){ h = Math.max(20, startH-dy); t = startT+(startH-h); }
     el.style.left=l+'px'; el.style.top=t+'px'; el.style.width=w+'px'; el.style.height=h+'px';
-    // 직계 부모도 같이 fit
-    const p = el.parentNode;
-    if(p && !(p.classList && p.classList.contains('slide'))){
-      const r = fitParentToChildren(p);
-      if(r && (r.dL !== 0 || r.dT !== 0)){
-        startL -= r.dL;
-        startT -= r.dT;
-      }
-    }
     renderHandles();
     syncPropFields();
   };
