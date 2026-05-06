@@ -54,6 +54,9 @@ button{font-family:inherit;font-size:12px;}
 .handle.h-sw{cursor:nesw-resize;} .handle.h-se{cursor:nwse-resize;}
 .handle.h-n{cursor:ns-resize;}    .handle.h-s{cursor:ns-resize;}
 .handle.h-w{cursor:ew-resize;}    .handle.h-e{cursor:ew-resize;}
+.snap-guide{position:absolute;background:#ff3ea5;pointer-events:none;z-index:5;box-shadow:0 0 4px rgba(255,62,165,.6);}
+.snap-guide.v{width:1px;top:0;height:800px;}
+.snap-guide.h{height:1px;left:0;width:1280px;}
 
 /* 우측 속성 패널 */
 .ph{font-size:10px;letter-spacing:2px;font-weight:700;color:#8a8f9a;margin:14px 0 6px;}
@@ -121,7 +124,7 @@ button{font-family:inherit;font-size:12px;}
   <div id="right">
     <div id="props"><div id="empty-msg">선택된 요소가 없습니다.<br><br>가운데 슬라이드의 아무 요소나<br>클릭하여 편집을 시작하세요.</div></div>
   </div>
-  <div id="hintbar"><b>단축키</b> · 클릭 선택 · 방향키 이동(Shift=10px) · Alt+방향키 크기 변경 · DEL 삭제 · Ctrl+D 복제 · Ctrl+C/V 복사·붙여넣기 · ESC 해제</div>
+  <div id="hintbar"><b>단축키</b> · 클릭 선택 · 드래그 이동(스냅 ON, Alt=스냅 OFF) · 방향키 이동(Shift=10px) · Alt+방향키 크기 · DEL 삭제 · Ctrl+Z/Y 실행취소·다시 · Ctrl+C/V/X 복사·붙여·잘라 · Ctrl+D 복제 · ESC 해제</div>
 </div>
 <div id="status"></div>
 
@@ -352,15 +355,19 @@ function wireIframe(){
 
   // hover outline
   fdoc.body.addEventListener('mouseover', e => {
+    if(state.dragging) return;
     const el = e.target;
     if(!el || el===fdoc.body || el===fdoc.documentElement) return;
     if(getSlideRoot(el)) el.setAttribute('data-edit-hover','');
   });
   fdoc.body.addEventListener('mouseout', e => {
+    if(state.dragging) return;
     if(e.target.removeAttribute) e.target.removeAttribute('data-edit-hover');
   });
   fdoc.body.addEventListener('click', e => {
     e.preventDefault(); e.stopPropagation();
+    // 드래그 직후 발화되는 click 무시 (다른 요소로 포커스가 튀는 것 방지)
+    if(state.justDragged){ state.justDragged = false; return; }
     const el = e.target;
     const root = getSlideRoot(el);
     if(!root) return;
@@ -664,27 +671,31 @@ function makeAbsolute(el){
   const elIdx = Array.from(el.parentNode.children).indexOf(el);
   const isWrappingFrame = Array.from(el.parentNode.children).slice(elIdx+1).some(s => {
     if(s.hasAttribute && s.hasAttribute('data-edit-spacer')) return false;
+    if(s.tagName === 'BR') return false;
     const p = win.getComputedStyle(s).position;
     if(p !== 'static' && p !== 'relative') return false;
     const sr = s.getBoundingClientRect();
+    if(sr.width <= 0 || sr.height <= 0) return false;
     return sr.left >= elRect.left && sr.right <= elRect.right
         && sr.top  >= elRect.top  && sr.bottom <= elRect.bottom;
   });
 
   // 형제 요소가 빈 자리로 밀려오지 않도록 같은 크기의 spacer를 원래 자리에 삽입
   // (flex/grid 부모도 동일하게 동작 — 자리 점유만 하고 시각적으로는 보이지 않음)
+  // 얕은 clone으로 만들어서 같은 태그/클래스/인라인 스타일을 그대로 상속 →
+  // display, padding, flex-grow/shrink/basis, min/max-width 등 모든 레이아웃 속성 보존
   if(!el.previousElementSibling || !el.previousElementSibling.hasAttribute('data-edit-spacer')){
-    const doc = el.ownerDocument;
-    const cs = doc.defaultView.getComputedStyle(el);
-    const spacer = doc.createElement('div');
+    const spacer = el.cloneNode(false);
+    spacer.removeAttribute('id');
+    spacer.removeAttribute('data-edit-selected');
+    spacer.removeAttribute('data-edit-multi');
+    spacer.removeAttribute('data-edit-hover');
     spacer.setAttribute('data-edit-spacer','');
+    // 빈 콘텐츠라도 원래 크기 유지하도록 명시적 크기 고정
     spacer.style.width = w + 'px';
     spacer.style.height = h + 'px';
-    spacer.style.margin = cs.margin;
-    if(cs.flex && cs.flex !== '0 1 auto') spacer.style.flex = cs.flex;
-    if(cs.gridColumn && cs.gridColumn !== 'auto') spacer.style.gridColumn = cs.gridColumn;
-    if(cs.gridRow && cs.gridRow !== 'auto') spacer.style.gridRow = cs.gridRow;
-    if(cs.alignSelf && cs.alignSelf !== 'auto') spacer.style.alignSelf = cs.alignSelf;
+    spacer.style.minWidth = w + 'px';
+    spacer.style.minHeight = h + 'px';
     spacer.style.visibility = 'hidden';
     spacer.style.pointerEvents = 'none';
     el.parentNode.insertBefore(spacer, el);
@@ -702,40 +713,177 @@ function makeAbsolute(el){
   }
 }
 
+// 직계 부모 한 단계만, 직계 자식들의 union bbox에 맞춰 부모 박스를 재크기/재배치.
+// 자식이 absolute든 in-flow든 모두 직계 자식만 대상으로 한다.
+// 부모가 좌/상으로 확장되면 origin이 이동하므로, absolute 자식들의 left/top을
+// 보정해 슬라이드 좌표 기준 위치는 그대로 유지한다. 부모가 슬라이드면 무시.
+// 반환: { dL, dT } — 부모 origin이 이동한 양 (caller가 자기 상태 보정용으로 사용).
+function fitParentToChildren(parent){
+  if(!parent || parent.nodeType !== 1) return null;
+  if(parent.tagName === 'BODY' || parent.tagName === 'HTML') return null;
+  if(parent.classList && parent.classList.contains('slide')) return null;
+  if(parent.style.position !== 'absolute') makeAbsolute(parent);
+
+  const slide = getSlideRoot(parent);
+  if(!slide) return null;
+  const slideRect = slide.getBoundingClientRect();
+
+  let minL = Infinity, minT = Infinity, maxR = -Infinity, maxB = -Infinity;
+  Array.from(parent.children).forEach(c => {
+    if(c.hasAttribute && c.hasAttribute('data-edit-spacer')) return;
+    if(c.tagName === 'BR') return;
+    const r = c.getBoundingClientRect();
+    if(r.width <= 0 && r.height <= 0) return;
+    const sl = r.left - slideRect.left;
+    const st = r.top  - slideRect.top;
+    if(sl < minL) minL = sl;
+    if(st < minT) minT = st;
+    if(sl + r.width  > maxR) maxR = sl + r.width;
+    if(st + r.height > maxB) maxB = st + r.height;
+  });
+  if(!isFinite(minL)) return null;
+
+  const pRect = parent.getBoundingClientRect();
+  const pSlideL = pRect.left - slideRect.left;
+  const pSlideT = pRect.top  - slideRect.top;
+  const dL = minL - pSlideL;
+  const dT = minT - pSlideT;
+
+  const curPL = parseFloat(parent.style.left) || 0;
+  const curPT = parseFloat(parent.style.top)  || 0;
+  parent.style.left   = (curPL + dL) + 'px';
+  parent.style.top    = (curPT + dT) + 'px';
+  parent.style.width  = (maxR - minL) + 'px';
+  parent.style.height = (maxB - minT) + 'px';
+
+  // 부모 origin이 이동했으면 absolute 자식들 보정 → 슬라이드 좌표 유지
+  if(dL !== 0 || dT !== 0){
+    Array.from(parent.children).forEach(c => {
+      if(c.hasAttribute && c.hasAttribute('data-edit-spacer')) return;
+      if(c.tagName === 'BR') return;
+      if(c.style.position === 'absolute'){
+        const cl = parseFloat(c.style.left) || 0;
+        const ct = parseFloat(c.style.top)  || 0;
+        c.style.left = (cl - dL) + 'px';
+        c.style.top  = (ct - dT) + 'px';
+      }
+    });
+  }
+  return {dL, dT};
+}
+
 function startDragMove(e){
   const primary = state.selected; if(!primary) return;
   if(primary.classList && primary.classList.contains('slide')) return; // don't drag the whole slide
   const targets = getAllSelected().filter(t => !(t.classList && t.classList.contains('slide')));
   // 임계값(4px) 넘게 움직였을 때만 makeAbsolute 호출 — 단순 클릭에서 절대위치 전환되는 것 방지
   const DRAG_THRESHOLD = 4;
-  const startX = e.clientX, startY = e.clientY;
+  const SNAP_THRESHOLD = 6;
+  // screenX/screenY 사용 — iframe 경계 넘나들어도 좌표계 일관됨 (clientX는 iframe/parent 기준이 달라 점프 발생)
+  const startX = e.screenX, startY = e.screenY;
   const starts = []; // [{el, l, t}]
   let dragOriginX = 0, dragOriginY = 0, dragging = false;
+  let snapXs = null, snapYs = null, slideRect0 = null;
   const fdoc = $('frame').contentDocument;
   const beginDrag = (ev) => {
+    state.dragging = true;
+    // 드래그 시작 시 hover 표시 모두 제거 → 끊김/깜빡임 방지
+    fdoc.querySelectorAll('[data-edit-hover]').forEach(n => n.removeAttribute('data-edit-hover'));
+    // 드래그 중 텍스트 선택/캐럿 방지
+    fdoc.body.style.userSelect = 'none';
+    fdoc.body.style.webkitUserSelect = 'none';
     targets.forEach(t => {
       if(t.style.position !== 'absolute') makeAbsolute(t);
       starts.push({el:t, l: parseFloat(t.style.left)||0, t: parseFloat(t.style.top)||0});
     });
-    dragOriginX = ev.clientX;
-    dragOriginY = ev.clientY;
+    // 스냅 타겟 수집: 슬라이드 L/C/R, T/M/B + 다른 형제들의 동일 라인
+    const slide = getSlideRoot(primary);
+    if(slide){
+      slideRect0 = slide.getBoundingClientRect();
+      const draggedSet = new Set(targets);
+      const xs = [0, slideRect0.width/2, slideRect0.width];
+      const ys = [0, slideRect0.height/2, slideRect0.height];
+      slide.querySelectorAll('*').forEach(n => {
+        if(draggedSet.has(n)) return;
+        if(n.hasAttribute && n.hasAttribute('data-edit-spacer')) return;
+        const r = n.getBoundingClientRect();
+        if(r.width <= 0 || r.height <= 0) return;
+        const lx = r.left - slideRect0.left;
+        const ty = r.top  - slideRect0.top;
+        xs.push(lx, lx + r.width/2, lx + r.width);
+        ys.push(ty, ty + r.height/2, ty + r.height);
+      });
+      snapXs = xs; snapYs = ys;
+    }
+    dragOriginX = ev.screenX;
+    dragOriginY = ev.screenY;
     dragging = true;
   };
   const onMove = ev => {
     if(!dragging){
-      const dx0 = ev.clientX - startX, dy0 = ev.clientY - startY;
+      const dx0 = ev.screenX - startX, dy0 = ev.screenY - startY;
       if(Math.abs(dx0) < DRAG_THRESHOLD && Math.abs(dy0) < DRAG_THRESHOLD) return;
       beginDrag(ev);
       return;
     }
+    ev.preventDefault();
     const scale = getScale() || 1;
-    const dx = (ev.clientX - dragOriginX) / scale;
-    const dy = (ev.clientY - dragOriginY) / scale;
+    const dx = (ev.screenX - dragOriginX) / scale;
+    const dy = (ev.screenY - dragOriginY) / scale;
     starts.forEach(s => {
       s.el.style.left = (s.l + dx) + 'px';
       s.el.style.top  = (s.t + dy) + 'px';
     });
+    // 스냅 적용 (Alt 누르면 스냅 OFF)
+    let guideX = null, guideY = null;
+    if(snapXs && !ev.altKey){
+      const pRect = primary.getBoundingClientRect();
+      const pL = pRect.left - slideRect0.left;
+      const pT = pRect.top  - slideRect0.top;
+      const pR = pL + pRect.width;
+      const pB = pT + pRect.height;
+      const pCx = pL + pRect.width/2;
+      const pCy = pT + pRect.height/2;
+      let bestX = SNAP_THRESHOLD + 1, snapDx = 0;
+      [pL, pCx, pR].forEach(v => {
+        snapXs.forEach(x => {
+          const d = x - v;
+          if(Math.abs(d) < Math.abs(bestX)){ bestX = d; snapDx = d; guideX = x; }
+        });
+      });
+      let bestY = SNAP_THRESHOLD + 1, snapDy = 0;
+      [pT, pCy, pB].forEach(v => {
+        snapYs.forEach(y => {
+          const d = y - v;
+          if(Math.abs(d) < Math.abs(bestY)){ bestY = d; snapDy = d; guideY = y; }
+        });
+      });
+      if(Math.abs(bestX) <= SNAP_THRESHOLD){
+        starts.forEach(s => { s.el.style.left = (parseFloat(s.el.style.left)+snapDx)+'px'; });
+      } else { guideX = null; }
+      if(Math.abs(bestY) <= SNAP_THRESHOLD){
+        starts.forEach(s => { s.el.style.top  = (parseFloat(s.el.style.top) +snapDy)+'px'; });
+      } else { guideY = null; }
+    }
+    // 직계 부모를 자식들 union bbox에 맞게 매 tick 재크기 (다중 선택 시 부모 모두 처리)
+    const fitParents = new Set();
+    starts.forEach(s => {
+      const p = s.el.parentNode;
+      if(p && !(p.classList && p.classList.contains('slide'))) fitParents.add(p);
+    });
+    fitParents.forEach(p => {
+      const r = fitParentToChildren(p);
+      if(!r || (r.dL === 0 && r.dT === 0)) return;
+      // 부모가 이동한 만큼 starts의 기준값을 보정 → 다음 tick의 (s.l + dx)가 동일 슬라이드 좌표 유지
+      starts.forEach(s => {
+        if(s.el.parentNode === p){
+          s.l -= r.dL;
+          s.t -= r.dT;
+        }
+      });
+    });
     renderHandles();
+    drawSnapGuides(guideX, guideY);
     syncPropFields();
   };
   const onUp = () => {
@@ -743,7 +891,17 @@ function startDragMove(e){
     fdoc.removeEventListener('mouseup', onUp, true);
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('mouseup', onUp, true);
-    if(dragging) snapshot();
+    drawSnapGuides(null, null);
+    if(dragging){
+      state.dragging = false;
+      state.justDragged = true; // 직후 발화되는 click 무시
+      // 큰 거리를 드래그한 경우 click 이벤트가 발화되지 않을 수 있어
+      // 다음 macrotask에서 자동으로 플래그를 리셋 → 이후 클릭은 정상 처리
+      setTimeout(() => { state.justDragged = false; }, 0);
+      fdoc.body.style.userSelect = '';
+      fdoc.body.style.webkitUserSelect = '';
+      snapshot();
+    }
   };
   fdoc.addEventListener('mousemove', onMove, true);
   fdoc.addEventListener('mouseup', onUp, true);
@@ -755,30 +913,79 @@ function startResize(dir, e){
   e.preventDefault(); e.stopPropagation();
   const el = state.selected; if(!el) return;
   if(el.style.position !== 'absolute') makeAbsolute(el);
-  const startX = e.clientX, startY = e.clientY;
-  const startL = parseFloat(el.style.left)||0;
-  const startT = parseFloat(el.style.top)||0;
+  // screenX/screenY 사용 — 마우스가 iframe 위로 이동해도 일관된 좌표
+  const startX = e.screenX, startY = e.screenY;
+  let startL = parseFloat(el.style.left)||0;
+  let startT = parseFloat(el.style.top)||0;
   const startW = parseFloat(el.style.width)||el.offsetWidth;
   const startH = parseFloat(el.style.height)||el.offsetHeight;
   const scale = getScale();
+  const fdoc = $('frame').contentDocument;
+  state.dragging = true;
+  if(fdoc && fdoc.body){
+    fdoc.body.style.userSelect = 'none';
+    fdoc.body.style.webkitUserSelect = 'none';
+  }
   const onMove = ev => {
-    const dx = (ev.clientX - startX)/scale, dy = (ev.clientY - startY)/scale;
+    ev.preventDefault();
+    const dx = (ev.screenX - startX)/scale, dy = (ev.screenY - startY)/scale;
     let l=startL,t=startT,w=startW,h=startH;
     if(dir.includes('e')) w = Math.max(20, startW+dx);
     if(dir.includes('s')) h = Math.max(20, startH+dy);
     if(dir.includes('w')){ w = Math.max(20, startW-dx); l = startL+(startW-w); }
     if(dir.includes('n')){ h = Math.max(20, startH-dy); t = startT+(startH-h); }
     el.style.left=l+'px'; el.style.top=t+'px'; el.style.width=w+'px'; el.style.height=h+'px';
+    // 직계 부모도 같이 fit
+    const p = el.parentNode;
+    if(p && !(p.classList && p.classList.contains('slide'))){
+      const r = fitParentToChildren(p);
+      if(r && (r.dL !== 0 || r.dT !== 0)){
+        startL -= r.dL;
+        startT -= r.dT;
+      }
+    }
     renderHandles();
     syncPropFields();
   };
   const onUp = () => {
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('mouseup', onUp, true);
+    if(fdoc){
+      fdoc.removeEventListener('mousemove', onMove, true);
+      fdoc.removeEventListener('mouseup', onUp, true);
+      if(fdoc.body){
+        fdoc.body.style.userSelect = '';
+        fdoc.body.style.webkitUserSelect = '';
+      }
+    }
+    state.dragging = false;
     snapshot();
   };
   document.addEventListener('mousemove', onMove, true);
   document.addEventListener('mouseup', onUp, true);
+  // iframe doc에도 리스너 부착 — 마우스가 iframe 위로 이동했을 때 이벤트 손실 방지
+  if(fdoc){
+    fdoc.addEventListener('mousemove', onMove, true);
+    fdoc.addEventListener('mouseup', onUp, true);
+  }
+}
+
+// ============ Snap Guides ============
+function drawSnapGuides(x, y){
+  const ov = $('overlay'); if(!ov) return;
+  ov.querySelectorAll('.snap-guide').forEach(n => n.remove());
+  if(x !== null && x !== undefined){
+    const v = document.createElement('div');
+    v.className = 'snap-guide v';
+    v.style.left = x + 'px';
+    ov.appendChild(v);
+  }
+  if(y !== null && y !== undefined){
+    const h = document.createElement('div');
+    h.className = 'snap-guide h';
+    h.style.top = y + 'px';
+    ov.appendChild(h);
+  }
 }
 
 // ============ Handles (rendered in parent doc, over iframe) ============
